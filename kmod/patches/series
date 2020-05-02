@@ -4,3 +4,4 @@
 004-remove-trace-printk.patch
 005-time64.patch
 006-proc_ops.patch
+007-loading-is-not-an-error.patch
