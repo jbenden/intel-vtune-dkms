@@ -1,0 +1,27 @@
+--- a/src/sys64.S	2020-02-02 13:50:48.115924420 -0700
++++ b/src/sys64.S	2020-02-02 13:52:02.903102145 -0700
+@@ -44,10 +44,10 @@
+ #
+ #***********************************************************************
+         .global SYS_Get_GDT_Base
+-ENTRY(SYS_Get_GDT_Base)
++SYM_FUNC_START(SYS_Get_GDT_Base)
+         SGDT (%rdi)
+         ret
+-ENDPROC(SYS_Get_GDT_Base)
++SYM_FUNC_END(SYS_Get_GDT_Base)
+ 
+ #***********************************************************************
+ #
+@@ -79,9 +79,9 @@
+ #
+ #***********************************************************************
+         .global SYS_IO_Delay
+-ENTRY(SYS_IO_Delay)
++SYM_FUNC_START(SYS_IO_Delay)
+          ret
+-ENDPROC(SYS_IO_Delay)
++SYM_FUNC_END(SYS_IO_Delay)
+ 
+ # ----------------------------------------------------------------------------
+ # name:         SYS_PerfVec_Handler

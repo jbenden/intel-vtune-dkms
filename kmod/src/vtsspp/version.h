@@ -1,0 +1,7 @@
+#ifndef _VTSS_VERSION_H_
+#define _VTSS_VERSION_H_
+#define VTSS_VERSION_MAJOR    1
+#define VTSS_VERSION_MINOR    8
+#define VTSS_VERSION_REVISION 184
+#define VTSS_VERSION_STRING   "1.8.184-602217"
+#endif
