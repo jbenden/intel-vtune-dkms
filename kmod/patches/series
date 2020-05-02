@@ -1,0 +1,3 @@
+001-vtsspp.patch -p1
+002-src-sys64.S.patch -p1
+003-linux56.patch -p1
