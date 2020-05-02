@@ -1,3 +1,6 @@
 001-vtsspp.patch -p1
-002-src-sys64.S.patch -p1
-003-linux56.patch -p1
+002-src-sys64.S.patch
+003-ioremap.patch
+004-remove-trace-printk.patch
+005-time64.patch
+006-proc_ops.patch
