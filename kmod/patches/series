@@ -1,3 +1,4 @@
+008-asm-generic.patch
 001-vtsspp.patch -p1
 002-src-sys64.S.patch
 003-ioremap.patch
