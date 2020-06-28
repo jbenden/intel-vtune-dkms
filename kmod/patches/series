@@ -6,3 +6,4 @@
 005-time64.patch
 006-proc_ops.patch
 007-loading-is-not-an-error.patch
+009-kallsym.patch
