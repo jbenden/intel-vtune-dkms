@@ -140,11 +140,11 @@ UNC_COMMON_Init (void)
     U32  i           = 0;
 
     for (i = 0; i < MAX_DEVICES; i++) {
-        memset(&(unc_pcidev_map[i]), 0, sizeof(UNC_PCIDEV_NODE));
+        SEP_DRV_MEMSET(&(unc_pcidev_map[i]), 0, sizeof(UNC_PCIDEV_NODE));
     }
 
-    memset((char *)&uncore_topology, 0, sizeof(UNCORE_TOPOLOGY_INFO_NODE));
-    memset((char*)&platform_topology_prog_node, 0, sizeof(PLATFORM_TOPOLOGY_PROG_NODE));
+    SEP_DRV_MEMSET((char *)&uncore_topology, 0, sizeof(UNCORE_TOPOLOGY_INFO_NODE));
+    SEP_DRV_MEMSET((char*)&platform_topology_prog_node, 0, sizeof(PLATFORM_TOPOLOGY_PROG_NODE));
 
     return OS_SUCCESS;
 }
@@ -170,7 +170,7 @@ UNC_COMMON_Clean_Up (void)
         if (UNC_PCIDEV_mmio_map(&(unc_pcidev_map[i]))) {
             UNC_PCIDEV_mmio_map(&(unc_pcidev_map[i])) = CONTROL_Free_Memory(UNC_PCIDEV_mmio_map(&(unc_pcidev_map[i])));
         }
-        memset(&(unc_pcidev_map[i]), 0, sizeof(UNC_PCIDEV_NODE));
+        SEP_DRV_MEMSET(&(unc_pcidev_map[i]), 0, sizeof(UNC_PCIDEV_NODE));
     }
     return;
 }

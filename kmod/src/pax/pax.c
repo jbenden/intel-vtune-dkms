@@ -77,7 +77,9 @@ static PAX_VERSION_NODE pax_version;           // version of PAX
 static PAX_INFO_NODE    pax_info;              // information on PAX
 static PAX_STATUS_NODE  pax_status;            // PAX reservation status
 
+#if !defined(DRV_UDEV_UNAVAILABLE)
 static struct class     *pax_class   = NULL;
+#endif
 
 
 #define NMI_WATCHDOG_PATH     "/proc/sys/kernel/nmi_watchdog"
@@ -848,11 +850,13 @@ pax_Load (
         return result;
     }
 
+#if !defined(DRV_UDEV_UNAVAILABLE)
     pax_class = class_create(THIS_MODULE, "pax");
     if (IS_ERR(pax_class)) {
         PAX_PRINT_ERROR("Error registering pax class\n");
     }
     device_create(pax_class, NULL, pax_devnum, NULL, "pax");
+#endif
 
     PAX_PRINT_DEBUG("%s major number is %d\n", PAX_NAME, MAJOR(pax_devnum));
     /* Allocate memory for the PAX control device */
@@ -917,9 +921,11 @@ pax_Unload (
     }
 
     // unregister PAX device
+#if !defined(DRV_UDEV_UNAVAILABLE)
     unregister_chrdev(MAJOR(pax_devnum), "pax");
     device_destroy(pax_class, pax_devnum);
     class_destroy(pax_class);
+#endif
 
     cdev_del(&PAX_DEV_cdev(pax_control));
     unregister_chrdev_region(pax_devnum, 1);

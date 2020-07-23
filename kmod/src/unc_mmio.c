@@ -42,12 +42,11 @@
 #include "inc/utility.h"
 #include "inc/pci.h"
 
+
 extern U64                        *read_counter_info;
 extern U64                        *prev_counter_data;
 extern DRV_CONFIG                  drv_cfg;
 extern EMON_BUFFER_DRIVER_HELPER   emon_buffer_driver_helper;
-
-static U8                          init_state;
 
 #define MASK_32BIT             0xffffffff
 #define MASK_64BIT             0xffffffff00000000ULL
@@ -1263,16 +1262,16 @@ unc_mmio_single_bar_Initialize (
     U64                        physical_address  = 0;
     U64                        bar               = 0;
     ECB                        pecb              = NULL;
-    DEV_UNC_CONFIG             pcfg_unc;
     MMIO_BAR_INFO              mmio_bar_info;
 
     SEP_DRV_LOG_TRACE_IN("Param: %p.", param);
 
     this_cpu     = CONTROL_THIS_CPU();
     dev_idx  = *((U32*)param);
+    cur_grp  = LWPMU_DEVICE_cur_group(&devices[(dev_idx)])[0];
+    pecb     = LWPMU_DEVICE_PMU_register_data(&devices[dev_idx])[cur_grp];
 
-    if (!init_state) {
-        pcfg_unc    = (DEV_UNC_CONFIG)LWPMU_DEVICE_pcfg(&devices[dev_idx]);
+    if (!pecb) {
         for (j = 0; j < (U32)LWPMU_DEVICE_em_groups_count(&devices[dev_idx]); j++) {
             pecb = LWPMU_DEVICE_PMU_register_data(&devices[dev_idx])[j];
             if (!pecb) {
@@ -1316,7 +1315,7 @@ unc_mmio_single_bar_Initialize (
             SEP_DRV_LOG_ERROR_TRACE_OUT("Early exit (No Memory).");
             return;
         }
-        memset(UNC_PCIDEV_mmio_map(&(unc_pcidev_map[dev_node])), 0, entries * sizeof(U64));
+        SEP_DRV_MEMSET(UNC_PCIDEV_mmio_map(&(unc_pcidev_map[dev_node])), 0, entries * sizeof(U64));
     }
 
     UNC_PCIDEV_num_mmio_main_bar_per_entry(&(unc_pcidev_map[dev_node]))      = 1;
@@ -1349,7 +1348,6 @@ unc_mmio_single_bar_Initialize (
         SEP_DRV_LOG_TRACE("va=0x%llx", virtual_address_table(dev_node, i));
     }
 
-    init_state = 1;
     SEP_DRV_LOG_TRACE_OUT("");
     return;
 }
@@ -1376,6 +1374,7 @@ unc_mmio_fpga_Initialize (
     U32              j           = 0;
     U32              offset      = 0;
     U32              dev_idx     = 0;
+    U32              cur_grp     = 0;
     U32              busno       = 0;
     U32              page_len    = 4096;
     U32              package_num = 0;
@@ -1389,14 +1388,14 @@ unc_mmio_fpga_Initialize (
     ECB              pecb        = NULL;
     SEP_MMIO_NODE    tmp_map     = {0};
     MMIO_BAR_INFO    mmio_bar_info;
-    DEV_UNC_CONFIG   pcfg_unc;
 
     SEP_DRV_LOG_TRACE_IN("Param: %p.", param);
 
     dev_idx = *((U32*)param);
+    cur_grp  = LWPMU_DEVICE_cur_group(&devices[(dev_idx)])[0];
+    pecb     = LWPMU_DEVICE_PMU_register_data(&devices[dev_idx])[cur_grp];
 
-    if (!init_state) {
-        pcfg_unc    = (DEV_UNC_CONFIG)LWPMU_DEVICE_pcfg(&devices[dev_idx]);
+    if (!pecb) {
         for (j = 0; j < (U32)LWPMU_DEVICE_em_groups_count(&devices[dev_idx]); j++) {
             pecb = LWPMU_DEVICE_PMU_register_data(&devices[dev_idx])[j];
             if (!pecb) {
@@ -1427,7 +1426,7 @@ unc_mmio_fpga_Initialize (
             SEP_DRV_LOG_ERROR_TRACE_OUT("Early exit (No Memory).");
             return;
         }
-        memset(UNC_PCIDEV_mmio_map(&(unc_pcidev_map[dev_node])), 0, (entries * sizeof(SEP_MMIO_NODE)));
+        SEP_DRV_MEMSET(UNC_PCIDEV_mmio_map(&(unc_pcidev_map[dev_node])), 0, (entries * sizeof(SEP_MMIO_NODE)));
         UNC_PCIDEV_num_entries(&(unc_pcidev_map[dev_node])) = 0;
         UNC_PCIDEV_max_entries(&(unc_pcidev_map[dev_node])) = entries;
     }
@@ -1475,7 +1474,6 @@ unc_mmio_fpga_Initialize (
         UNC_PCIDEV_num_entries(&(unc_pcidev_map[dev_node]))++;
     }
 
-    init_state = 1;
     SEP_DRV_LOG_TRACE_OUT("");
 #endif
     return;
@@ -1502,6 +1500,7 @@ unc_mmio_multiple_bar_Initialize (
     U32                        mem_offset             = 0;
     U32                        mem_bar                = 0;
     U32                        dev_idx                = 0;
+    U32                        cur_grp                = 0;
     U32                        dev_node               = 0;
     U32                        i                      = 0;
     U32                        j                      = 0;
@@ -1511,16 +1510,16 @@ unc_mmio_multiple_bar_Initialize (
     U64                        virtual_address        = 0;
     U64                        physical_address       = 0;
     ECB                        pecb                   = NULL;
-    DEV_UNC_CONFIG             pcfg_unc;
     MMIO_BAR_INFO              mmio_bar_info;
 
     SEP_DRV_LOG_TRACE("Param: %p.", param);
 
     this_cpu     = CONTROL_THIS_CPU();
     dev_idx  = *((U32*)param);
+    cur_grp  = LWPMU_DEVICE_cur_group(&devices[(dev_idx)])[0];
+    pecb     = LWPMU_DEVICE_PMU_register_data(&devices[dev_idx])[cur_grp];
 
-    if (!init_state) {
-        pcfg_unc    = (DEV_UNC_CONFIG)LWPMU_DEVICE_pcfg(&devices[dev_idx]);
+    if (!pecb) {
         for (j = 0; j < (U32)LWPMU_DEVICE_em_groups_count(&devices[dev_idx]); j++) {
             pecb = LWPMU_DEVICE_PMU_register_data(&devices[dev_idx])[j];
             if (!pecb) {
@@ -1554,7 +1553,7 @@ unc_mmio_multiple_bar_Initialize (
             SEP_DRV_LOG_ERROR_TRACE_OUT("Early exit (No Memory).");
             return;
         }
-        memset(UNC_PCIDEV_mmio_map(&(unc_pcidev_map[dev_node])), 0, entries * sizeof(U64));
+        SEP_DRV_MEMSET(UNC_PCIDEV_mmio_map(&(unc_pcidev_map[dev_node])), 0, entries * sizeof(U64));
     }
 
     UNC_PCIDEV_num_mmio_main_bar_per_entry(&(unc_pcidev_map[dev_node]))      = 1;
@@ -1599,7 +1598,6 @@ unc_mmio_multiple_bar_Initialize (
         }
     }
 
-    init_state = 1;
     SEP_DRV_LOG_TRACE_OUT("");
     return;
 }
@@ -1621,20 +1619,22 @@ unc_mmio_Destroy (
      PVOID   param
 )
 {
-    U32            dev_idx                = 0;
-    U32            i                      = 0;
-    U32            j                      = 0;
-    U32            dev_node               = 0;
-    U32            entries                = 0;
-    U32            num_mmio_secondary_bar = 0;
-    ECB            pecb                   = NULL;
-    DEV_UNC_CONFIG pcfg_unc;
+    U32                    dev_idx                = 0;
+    U32                    i                      = 0;
+    U32                    j                      = 0;
+    U32                    dev_node               = 0;
+    U32                    cur_grp                = 0;
+    U32                    entries                = 0;
+    U32                    num_mmio_secondary_bar = 0;
+    ECB                    pecb                   = NULL;
 
     SEP_DRV_LOG_TRACE_IN("Param: %p.", param);
 
     dev_idx = *((U32*)param);
-    if (init_state) {
-        pcfg_unc    = (DEV_UNC_CONFIG)LWPMU_DEVICE_pcfg(&devices[dev_idx]);
+    cur_grp  = LWPMU_DEVICE_cur_group(&devices[(dev_idx)])[0];
+    pecb     = LWPMU_DEVICE_PMU_register_data(&devices[dev_idx])[cur_grp];
+
+    if (!pecb) {
         for (j = 0; j < (U32)LWPMU_DEVICE_em_groups_count(&devices[dev_idx]); j++) {
             pecb = LWPMU_DEVICE_PMU_register_data(&devices[dev_idx])[j];
             if (!pecb) {
@@ -1644,7 +1644,6 @@ unc_mmio_Destroy (
                 break;
             }
         }
-        init_state = 0;
     }
 
     if (!pecb) {

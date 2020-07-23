@@ -87,7 +87,9 @@ CHMOD="chmod"
 CUT="cut"
 DIRNAME="dirname"
 GREP="grep"
+PGREP="pgrep"
 INSMOD="insmod"
+MKNOD="mknod"
 LSMOD="lsmod"
 MKDIR="mkdir"
 RM="rm"
@@ -103,7 +105,7 @@ YPCAT="ypcat"
 GROUPADD="groupadd"
 MODINFO="modinfo"
 
-COMMANDS_TO_CHECK="${CUT} ${DIRNAME} ${GREP} ${INSMOD} ${LSMOD} ${MKDIR} ${RM} ${SED} ${TR} ${UNAME} ${WHICH} ${CAT}"
+COMMANDS_TO_CHECK="${CUT} ${DIRNAME} ${GREP} ${PGREP} ${INSMOD} ${MKNOD} ${LSMOD} ${MKDIR} ${RM} ${SED} ${TR} ${UNAME} ${WHICH} ${CAT}"
 
 
 # ------------------------------ FUNCTIONS -----------------------------------
@@ -151,6 +153,9 @@ print_usage_and_exit()
   print_msg "      restricted environment mode: minimal requirements to the system runtime"
   print_msg "      like in busybox case"
   print_msg ""
+  print_msg "    --no-udev"
+  print_msg "      Create device files seapartely when no device manager is running"
+  print_msg ""
   exit $err
 }
 
@@ -173,6 +178,7 @@ fi
 
 # check for certain options
 reload_driver=0
+no_udev_mode=0
 while [ $# -gt 0 ] ; do
   case "$1" in
     -h | --help)
@@ -281,6 +287,9 @@ while [ $# -gt 0 ] ; do
       ;;
     -re | --restricted-environment)
       BUSYBOX_SHELL=yes
+      ;;
+    --no-udev)
+      no_udev_mode=1
       ;;
     *)
       print_err ""
@@ -393,6 +402,20 @@ if [ -z "${SMP}" ] ; then
 else
   ARITY="smp"
 fi
+
+# check if the device manager exists, and if not, then ask for the option
+UDEVD_PID=`${PGREP} udevd`
+if [ -z "${UDEVD_PID}" ] ; then
+  if [ $no_udev_mode -eq 0 ] ; then
+    print_err ""
+    print_err "The udev deivce manager is not running on the system."
+    print_err "Recompile the driver with the option '--no-udev'"
+    print_err "Then, run this script with the option '--no-udev'"
+    print_err ""
+    exit 236
+  fi
+fi
+
 
 # file name of the driver to load
 DRIVER_FILENAME=${DRIVER_NAME}${SEP_PER_USER}-${ARCH}-${KERNEL_VERSION}${ARITY}.ko
@@ -522,6 +545,10 @@ if [ ! -r ${DRIVER_DIRECTORY}/${DRIVER_FILENAME} ] ; then
   exit 235
 fi
 
+if [ $no_udev_mode -eq 1 ] ; then
+  INSMOD_ADDITIONAL_OPTIONS="$INSMOD_ADDITIONAL_OPTIONS --no-udev"
+fi
+
 # try to load the PAX driver if it was not already loaded
 print_nnl "Checking for PMU arbitration service (PAX) ... "
 pax_loaded=`${LSMOD} | ${CUT} -d ' ' -f 1| ${GREP} -E '\<pax\>'`
@@ -639,6 +666,31 @@ if [ -z "${DEVNUM}" ] ; then
   exit 233
 fi
 
+if [ $no_udev_mode -eq 1 ] ; then
+  # remove base devices that were previously created by the insmod script
+  if [ -e /dev/${DRIVER_NAME} ] ; then
+    print_nnl "Deleting previously created /dev/${DRIVER_NAME} base devices ... "
+    sleep 1
+    ${RM} -r ${SEP_FORCE} /dev/${DRIVER_NAME}
+    print_msg "done."
+  fi
+
+  # create the base devices
+  print_nnl "Creating /dev/${DRIVER_NAME} base devices with major number ${DEVNUM} ... "
+  sleep 1
+  ${MKDIR} -p /dev/${DRIVER_NAME}
+  ${MKNOD} /dev/${DRIVER_NAME}/c c ${DEVNUM} 0 && \
+  ${MKNOD} /dev/${DRIVER_NAME}/m c ${DEVNUM} 1
+  MKNOD_RESULT=$?
+  if [ ${MKNOD_RESULT} -ne 0 ] ; then
+    print_err ""
+    print_err "Error:  unable to create required /dev/${DRIVER_NAME} base devices !"
+    print_err ""
+    exit 232
+  fi
+  print_msg "done."
+fi
+
 # check if the driver readers were created
 DEVNUM2=`${GREP} -w ${DRIVER_NAME}_s /proc/devices | ${TR} -s ' ' | ${CUT} -d ' ' -f 1`
 if [ -z "${DEVNUM2}" ] ; then
@@ -646,6 +698,17 @@ if [ -z "${DEVNUM2}" ] ; then
   print_err "Error:  unable to find device \"${DRIVER_NAME}_s\" in /proc/devices !"
   print_err ""
   exit 233
+fi
+
+if [ $no_udev_mode -eq 1 ] ; then
+  # create the percpu devices
+  print_nnl "Creating /dev/${DRIVER_NAME} percpu devices with major number ${DEVNUM2} ... "
+  sleep 1
+  for minor_no in $num_cpus
+  do
+    ${MKNOD} /dev/${DRIVER_NAME}/s${minor_no} c ${DEVNUM2} ${minor_no}
+  done
+  print_msg "done."
 fi
 
 # check if the driver readers were created
@@ -657,6 +720,17 @@ if [ -z "${DEVNUM3}" ] ; then
   exit 233
 fi
 
+if [ $no_udev_mode -eq 1 ] ; then
+  # create the percpu sideband devices
+  print_nnl "Creating /dev/${DRIVER_NAME} percpu devices with major number ${DEVNUM3} ... "
+  sleep 1
+  for minor_no in $num_cpus
+  do
+    ${MKNOD} /dev/${DRIVER_NAME}/b${minor_no} c ${DEVNUM3} ${minor_no}
+  done
+  print_msg "done."
+fi
+
 # check if the driver readers were created
 DEVNUM4=`${GREP} -w ${DRIVER_NAME}_u /proc/devices | ${TR} -s ' ' | ${CUT} -d ' ' -f 1`
 if [ -z "${DEVNUM4}" ] ; then
@@ -664,6 +738,36 @@ if [ -z "${DEVNUM4}" ] ; then
   print_err "Error:  unable to find device \"${DRIVER_NAME}_u\" in /proc/devices !"
   print_err ""
   exit 233
+fi
+
+if [ $no_udev_mode -eq 1 ] ; then
+  # create the per package uncore devices
+  print_nnl "Creating /dev/${DRIVER_NAME} per package devices with major number ${DEVNUM4} ... "
+  sleep 1
+  minor_no=0
+  while [ $minor_no -le $num_packages ]
+  do
+    ${MKNOD} /dev/${DRIVER_NAME}/u${minor_no} c ${DEVNUM4} ${minor_no}
+    minor_no=`expr $minor_no + 1`
+  done
+  print_msg "done."
+fi
+
+# check if the driver readers were created
+DEVNUM5=`${GREP} -w ${DRIVER_NAME}_e /proc/devices | ${TR} -s ' ' | ${CUT} -d ' ' -f 1`
+if [ -z "${DEVNUM5}" ] ; then
+  print_err ""
+  print_err "Error:  unable to find device \"${DRIVER_NAME}_e\" in /proc/devices !"
+  print_err ""
+  exit 233
+fi
+
+if [ $no_udev_mode -eq 1 ] ; then
+  # create the emon controlevices
+  print_nnl "Creating /dev/${DRIVER_NAME} device with major number ${DEVNUM4} ... "
+  sleep 1
+  ${MKNOD} /dev/${DRIVER_NAME}/e${minor_no} c ${DEVNUM5} ${minor_no}
+  print_msg "done."
 fi
 
 # change group ownership to whichever group is permitted to open the driver

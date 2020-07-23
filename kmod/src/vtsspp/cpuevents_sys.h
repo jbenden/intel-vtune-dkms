@@ -25,6 +25,36 @@
   invalidate any other reasons why the executable file might be covered by
   the GNU General Public License.
 */
+#ifndef _VTSS_CPUEVENTS_SYS_H_
+#define _VTSS_CPUEVENTS_SYS_H_
+
+/// SNB power MSRs
+#define VTSS_MSR_PKG_ENERGY_STATUS  0x611
+#define VTSS_MSR_PP0_ENERGY_STATUS  0x639
+#define VTSS_MSR_PP1_ENERGY_STATUS  0x641    /// 06_2a
+#define VTSS_MSR_DRAM_ENERGY_STATUS 0x619    /// 06_2d
+
+sysevent_desc_t sysevent_desc[] = {
+    {"Synchronization Context Switches", "Thread being swapped out due to contention on a synchronization object"},
+    {"Preemption Context Switches", "Thread being preempted by the OS scheduler"},
+    {"Wait Time", "Time while the thread is waiting on a synchronization object"},
+    {"Inactive Time", "Time while the thread is preempted and resides in the ready queue"},
+    {"Idle Time", "Time while no other thread was active before activating the current thread"},
+    {"Idle Wakeup", "Thread waking up the system from idleness"},
+    {"C3 Residency", "Time in low power sleep mode with all but the shared cache flushed"},
+    {"C6 Residency", "Time in low power sleep mode with all caches flushed"},
+    {"C7 Residency", "Time in low power sleep mode with all caches flushed and powered off"},
+    {"Energy Core", "Energy (uJoules) consumed by the processor core"},
+    {"Energy GFX", "Energy (uJoules) consumed by the uncore graphics"},
+    {"Energy Pack", "Energy (uJoules) consumed by the processor package"},
+    {"Energy DRAM", "Energy (uJoules) consumed by the memory"},
+    {"Charge SoC", "Charge (Coulombs) consumed by the system"},
+#ifdef VTSS_SYSCALL_TRACE
+    {"Syscalls", "The number of calls to OS functions"},
+    {"Syscalls Time", "Time spent in system calls"},
+#endif
+    {NULL, NULL}
+};
 
 /// system event control virtual functions
 static void vf_sys_start(cpuevent_t* this)
@@ -224,42 +254,15 @@ static void vf_sys_update_restart(cpuevent_t* this)
         break;
 
     case vtss_sysevent_idle_time:
-
-        if (this->tmp == 1) { /* switch_to */
-            this->count += pcb_cpu.idle_duration;
-        }
         break;
-
     case vtss_sysevent_idle_wakeup:
-
-        if (this->tmp == 1) { /* switch_to */
-            if (pcb_cpu.idle_duration) {
-                this->count++;
-            }
-        }
         break;
-
     case vtss_sysevent_idle_c3:
-
-        if (this->tmp == 1) { /* switch_to */
-            this->count += pcb_cpu.idle_c3_residency;
-        }
         break;
-
     case vtss_sysevent_idle_c6:
-
-        if (this->tmp == 1) { /* switch_to */
-            this->count += pcb_cpu.idle_c6_residency;
-        }
         break;
-
     case vtss_sysevent_idle_c7:
-
-        if (this->tmp == 1) { /* switch_to */
-            this->count += pcb_cpu.idle_c7_residency;
-        }
         break;
-
     case vtss_sysevent_energy_core:
         break;
     case vtss_sysevent_energy_gfx:
@@ -341,3 +344,4 @@ sysevent_e sysevent_type[] = {
 #endif
     vtss_sysevent_end
 };
+#endif

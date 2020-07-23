@@ -1,4 +1,4 @@
-#!/usr/bin/python2
+#!/usr/bin/env python
 
 
 #     Copyright(C) 2016-2018 Intel Corporation.  All Rights Reserved.
@@ -33,7 +33,12 @@ import os
 import sys
 
 EFI_SYSTAB_FILE = "/sys/firmware/efi/systab"
-FILENAME = "/dev/mem"
+# Traditional way to read the SMBIOS>
+MEMDEV_FILENAME = "/dev/mem"
+# Recent kernel export the raw DMI table data via sysfs when CONFIG_DMI_SYSFS is set
+# This becomes the primary method to capture SMBIOS if sysfs is available
+ENTRY_POINT_SYSFS_FILENAME = "/sys/firmware/dmi/tables/smbios_entry_point"
+STRUCT_TABLE_SYSFS_FILENAME = "/sys/firmware/dmi/tables/DMI"
 STRUCT_HEADER_LEN = 4
 STRUCT_HEADER_OFFSET_TYPE = 0
 STRUCT_HEADER_OFFSET_LEN = 1
@@ -55,23 +60,24 @@ struct_table_add = -1
 struct_table_len = 0
 num_struct = 0
 
-def unpack_one_byte():
-    return struct.unpack('1B', os.read(fd, 1))[0]
 
-def unpack_two_byte():
-    return struct.unpack('1H', os.read(fd, 2))[0]
+def unpack_one_byte(data, offset):
+    return struct.unpack('1B', data[offset:(offset+1)])[0]
 
-def unpack_four_byte_int():
-    return struct.unpack('1I', os.read(fd, 4))[0]
+def unpack_two_byte(data, offset):
+    return struct.unpack('1H', data[offset:(offset+2)])[0]
 
-def unpack_four_byte_string():
-    return struct.unpack('4s', os.read(fd, 4))[0]
+def unpack_four_byte_int(data, offset):
+    return struct.unpack('1I', data[offset:(offset+4)])[0]
 
-def unpack_five_byte_string():
-    return struct.unpack('5s', os.read(fd, 5))[0]
+def unpack_four_byte_string(data, offset):
+    return struct.unpack('4s', data[offset:(offset+4)])[0]
 
-def unpack_eight_byte_int():
-    return struct.unpack('1Q', os.read(fd, 8))[0]
+def unpack_five_byte_string(data, offset):
+    return struct.unpack('5s', data[offset:(offset+5)])[0]
+
+def unpack_eight_byte_int(data, offset):
+    return struct.unpack('1Q', data[offset:(offset+8)])[0]
 
 
 def get_form_factor(form_factor_value):
@@ -194,10 +200,9 @@ def get_rank(rank_value):
 
 # check and get if extended size exists
 # also check for unit
-def get_if_extended_size(struct_add, size):
+def get_if_extended_size(struct_table_buffer, struct_add, size):
     if size == 32767:
-        os.lseek(fd, struct_add + MEM_DEV_OFFSET_EXT_SIZE, os.SEEK_SET)
-        size = unpack_four_byte_int()
+        size = unpack_four_byte_int(struct_table_buffer, struct_add + MEM_DEV_OFFSET_EXT_SIZE)
         #print("size_unit=MB")
         return size
     if (size >> 15) & 1 == 1:
@@ -209,39 +214,33 @@ def get_if_extended_size(struct_add, size):
 
 
 # parse through the memory strcutre and print out details
-def parse_memory_dev_struct(struct_add, len):
-    os.lseek(fd, struct_add + MEM_DEV_OFFSET_SIZE, os.SEEK_SET)
-    size = unpack_two_byte()
+def parse_memory_dev_struct(struct_table_buffer, struct_add, len):
+
+    size = unpack_two_byte(struct_table_buffer, struct_add + MEM_DEV_OFFSET_SIZE)
     print ""
     if size == 0:
         print("Unpopulated DIMM")
         return -1
-    size = get_if_extended_size(struct_add, size)
+    size = get_if_extended_size(struct_table_buffer, struct_add, size)
     print("size={0}".format(size))
 
-    os.lseek(fd, struct_add + MEM_DEV_OFFSET_TOTAL_WIDTH, os.SEEK_SET)
-    total_width = unpack_two_byte()
+    total_width = unpack_two_byte(struct_table_buffer, struct_add + MEM_DEV_OFFSET_TOTAL_WIDTH)
     print("total_width={0}".format(total_width))
 
-    os.lseek(fd, struct_add + MEM_DEV_OFFSET_DATA_WIDTH, os.SEEK_SET)
-    data_width = unpack_two_byte()
+    data_width = unpack_two_byte(struct_table_buffer, struct_add + MEM_DEV_OFFSET_DATA_WIDTH)
     print("data_width={0}".format(data_width))
 
-    os.lseek(fd, struct_add + MEM_DEV_OFFSET_FORM_FACTOR, os.SEEK_SET)
-    form_factor_value = unpack_one_byte()
+    form_factor_value = unpack_one_byte(struct_table_buffer, struct_add + MEM_DEV_OFFSET_FORM_FACTOR)
     print("form_factor={0}".format(get_form_factor(form_factor_value)))
 
-    os.lseek(fd, struct_add + MEM_DEV_OFFSET_MEM_TYPE, os.SEEK_SET)
-    mem_type_value = unpack_one_byte()
+    mem_type_value = unpack_one_byte(struct_table_buffer, struct_add + MEM_DEV_OFFSET_MEM_TYPE)
     print("mem_type={0}".format(get_mem_type(mem_type_value)))
 
-    os.lseek(fd, struct_add + MEM_DEV_OFFSET_MEM_TYPE_DETAIL, os.SEEK_SET)
-    mem_type_detail_value = unpack_two_byte()
+    mem_type_detail_value = unpack_two_byte(struct_table_buffer, struct_add + MEM_DEV_OFFSET_MEM_TYPE_DETAIL)
     print("mem_type_detail={0}".format(get_mem_detail_type(mem_type_detail_value)))
 
     if smbios_ver > 2.2: # speed available only from smbios version 2.3
-        os.lseek(fd, struct_add + MEM_DEV_OFFSET_SPEED, os.SEEK_SET)
-        speed = unpack_two_byte()
+        speed = unpack_two_byte(struct_table_buffer, struct_add + MEM_DEV_OFFSET_SPEED)
         if smbios_ver > 3.0: # unit is MT/s from smbios version 3.1 onwards
             print("speed={0} MT/s".format(speed))
         else:
@@ -250,54 +249,48 @@ def parse_memory_dev_struct(struct_add, len):
         print("speed=unavailable")
 
     if smbios_ver > 2.5: # rank available only from smbios version 2.6
-        os.lseek(fd, struct_add + MEM_DEV_OFFSET_RANK, os.SEEK_SET)
-        rank_value = unpack_one_byte()
+        rank_value = unpack_one_byte(struct_table_buffer, struct_add + MEM_DEV_OFFSET_RANK)
         print("rank={0}".format(get_rank(rank_value)))
     else:
         print("rank=unavailable")
 
 
 # parse the smbios structures
-def parse_smbios():
-    if struct_table_add == -1:
-        return -1
+def parse_smbios(struct_table_buffer):
     iter = 0
-    offset_handle = 2
-    struct_add = struct_table_add
+    struct_add = 0
 
     # struct_table_add + struct_table_len gives the address of the end of the last smbios structure
     # every structure will have a minimum length of 4
-    while (iter < num_struct or num_struct == 0) and struct_add + 4 <= struct_table_add + struct_table_len:
-        os.lseek(fd, struct_add + STRUCT_HEADER_OFFSET_TYPE, os.SEEK_SET)
-        type = unpack_one_byte()
-
-        os.lseek(fd, struct_add + STRUCT_HEADER_OFFSET_LEN, os.SEEK_SET)
-        len = unpack_one_byte()
+    while (iter < num_struct or num_struct == 0) and struct_add + 4 <= struct_table_len:
+        struct_type = unpack_one_byte(struct_table_buffer, struct_add + STRUCT_HEADER_OFFSET_TYPE)
+        struct_len = unpack_one_byte(struct_table_buffer, struct_add + STRUCT_HEADER_OFFSET_LEN)
 
         # smbios structure is broken if length < 4
-        if len < 4:
+        if struct_len < 4:
             print("Broken SMBIOS table.")
             return -1
 
         # parse and output details if DIMM type is 17
-        if type == 17:
-            parse_memory_dev_struct(struct_add, len)
+        if struct_type == 17:
+            parse_memory_dev_struct(struct_table_buffer, struct_add, struct_len)
 
         # move to the end of formatted section of the structure
-        struct_add += len
+        struct_add += struct_len
 
         # we have reached the beginning of text strings section
         # iterate through it until the end of the strings section
-        os.lseek(fd, struct_add, os.SEEK_SET)
-        first = unpack_one_byte()
+        first = unpack_one_byte(struct_table_buffer, struct_add)
         struct_add += 1
-        while struct_add - struct_table_add + 1 < struct_table_len:
-            os.lseek(fd, struct_add, os.SEEK_SET)
-            second = unpack_one_byte()
+
+        while struct_add <= struct_table_len - 1:
+            second = unpack_one_byte(struct_table_buffer, struct_add)
             struct_add += 1
             if first == 0 and second == 0:
                 break
             first = second
+        iter = iter + 1
+
 
 # obtain the smbios entry point by parsing through /dev/mem
 def parse_and_find_entry_point():
@@ -308,13 +301,13 @@ def parse_and_find_entry_point():
 # 0xF0000 - 0xFFFFF in decimals 983040 - 1048575
     for offset in range(983040, 1048575, 16):
         os.lseek(fd, offset, os.SEEK_SET)
-        anchor_str = unpack_five_byte_string()
+        anchor_str = struct.unpack('5s', os.read(fd, 5))[0]
 
         # _SM_ or _SM3_ or _SM3 marks the beginning of smbios
         if anchor_str == "_SM3_" or anchor_str == "_SM3":
             return offset
         os.lseek(fd, offset, os.SEEK_SET)
-        anchor_str = unpack_four_byte_string()
+        anchor_str = struct.unpack('4s', os.read(fd, 4))[0]
         if anchor_str == "_SM_":
             return offset
 
@@ -330,52 +323,46 @@ def parse_entry_point_struct(anchor_str):
     global struct_table_add
     global struct_table_len
     global num_struct
+    global entry_point_buffer
 
     if anchor_str == "_SM_":
         len_offset = 5
         maj_ver_offset = 6
         min_ver_offset = 7
 
-        os.lseek(fd, entry_point + 16, os.SEEK_SET)
-        inter_anchor_str = unpack_five_byte_string()
+        idx = 0;
+
+        inter_anchor_str = unpack_five_byte_string(entry_point_buffer, 0x10)
         print("inter_anchor_str={0}".format(inter_anchor_str))
 
-        os.lseek(fd, entry_point + 22, os.SEEK_SET)
-        struct_table_len = unpack_two_byte()
+        struct_table_len = unpack_two_byte(entry_point_buffer, 0x16)
         print("struct_table_len={0}".format(struct_table_len))
 
-        os.lseek(fd, entry_point + 24, os.SEEK_SET)
-        struct_table_add = unpack_four_byte_int()
+        struct_table_add = unpack_four_byte_int(entry_point_buffer, 0x18)
         print("struct_table_add={0}".format(struct_table_add))
 
-        os.lseek(fd, entry_point + 28, os.SEEK_SET)
-        num_struct = unpack_two_byte()
+        num_struct = unpack_two_byte(entry_point_buffer, 0x1c)
         print("num_struct={0}".format(num_struct))
     elif anchor_str == "_SM3_" or anchor_str == "_SM3":
         len_offset = 6
         maj_ver_offset = 7
         min_ver_offset = 8
 
-        os.lseek(fd, entry_point + 12, os.SEEK_SET)
-        struct_table_len = unpack_four_byte_int()
+        struct_table_len = unpack_four_byte_int(entry_point_buffer, 0x0c)
         print("struct_table_len={0}".format(struct_table_len))
 
-        os.lseek(fd, entry_point + 16, os.SEEK_SET)
-        struct_table_add = unpack_eight_byte_int()
+        struct_table_add = unpack_eight_byte_int(entry_point_buffer, 0x10)
         print("struct_table_add={0}".format(struct_table_add))
     else:
         return -1
 
-    os.lseek(fd, entry_point + len_offset, os.SEEK_SET)
-    entry_point_struct_len = unpack_one_byte()
+    entry_point_struct_len = unpack_one_byte(entry_point_buffer, len_offset)
     print("entry_point_struct_len={0}".format(entry_point_struct_len))
 
-    os.lseek(fd, entry_point + maj_ver_offset, os.SEEK_SET)
-    maj_ver = unpack_one_byte()
+    maj_ver = unpack_one_byte(entry_point_buffer, maj_ver_offset)
     print("maj_ver={0}".format(maj_ver))
 
-    os.lseek(fd, entry_point + min_ver_offset, os.SEEK_SET)
-    min_ver = unpack_one_byte()
+    min_ver = unpack_one_byte(entry_point_buffer, min_ver_offset)
     print("min_ver={0}".format(min_ver))
 
     # concatenate the max and min version to create single version string
@@ -385,6 +372,7 @@ def parse_entry_point_struct(anchor_str):
         denom = 10
     smbios_ver = maj_ver + (min_ver / float(denom))
     print("smbios_ver={0}".format(smbios_ver))
+
 
 # obtain the smbios entry point from /sys/firmware/efi/systab
 def process_efi():
@@ -403,41 +391,76 @@ def process_efi():
     except IOError as e:
         return -1
 
-def process_smbios(filename):
+def process_smbios():
     global fd
     global entry_point
+    global entry_point_buffer
+
     try:
-        # obtain smbios entry point from EFI
-        local_entry_pt = process_efi()
 
-        fd = os.open(filename, os.O_RDONLY)
+        sysfile_present = os.path.exists(ENTRY_POINT_SYSFS_FILENAME) \
+                          and os.path.exists(STRUCT_TABLE_SYSFS_FILENAME)
 
-        if local_entry_pt == -1:
-            # if EFI approach fails, obtain the smbios entry point
-            # by parsing through the /dev/mem
-            entry_point = parse_and_find_entry_point()
-            if entry_point == -1:
-                print ("Unable to find SMBIOS entry point.")
-                return -1
+        print "sysfile_present=", sysfile_present
 
-        print("entry_point:{0}".format(entry_point))
+        if sysfile_present:
+            fd = os.open(ENTRY_POINT_SYSFS_FILENAME, os.O_RDONLY)
+        else:
+            # obtain smbios entry point from EFI
+            local_entry_pt = process_efi()
 
-        os.lseek(fd, entry_point, os.SEEK_SET)
-        anchor_str = unpack_four_byte_string()
+            fd = os.open(MEMDEV_FILENAME, os.O_RDONLY)
+
+            if local_entry_pt == -1:
+                # if EFI approach fails, obtain the smbios entry point
+                # by parsing through the /dev/mem
+                entry_point = parse_and_find_entry_point()
+                if entry_point == -1:
+                    print ("Unable to find SMBIOS entry point.")
+                    return -1
+
+            print("entry_point:{0}".format(entry_point))
+
+            os.lseek(fd, entry_point, os.SEEK_SET)
+
+        entry_point_buffer = os.read(fd, 0x20)
+
+        if fd:
+            os.close(fd)
+            fd = None
+
+        anchor_str = unpack_four_byte_string(entry_point_buffer, 0)
         print("anchor_str={0}".format(anchor_str))
 
         # obtain address to first smbios structure,
         # total number of structures and total length of the structures
-        if parse_entry_point_struct(anchor_str) == -1:
+        if parse_entry_point_struct(anchor_str) == -1 or struct_table_add == -1:
             print("Unable to find entry point to SMBIOS.")
             return -1
 
-        if parse_smbios() == -1:
+        if sysfile_present:
+            fd = os.open(STRUCT_TABLE_SYSFS_FILENAME, os.O_RDONLY)
+        else:
+            fd = os.open(MEMDEV_FILENAME, os.O_RDONLY)
+            os.lseek(fd, struct_table_add, os.SEEK_SET)
+
+        readbuf = []
+        while len(readbuf) < struct_table_len:
+            buf = os.read(fd, struct_table_len-len(readbuf))
+            if len(buf) == 0:
+                break
+            readbuf += buf
+
+        if len(readbuf) < struct_table_len:
+            print("Unable to read the SMBIOS table entries.")
+            return -1
+
+        if parse_smbios(bytearray(readbuf)) == -1:
             print("Unable to find memory device struct.")
             return -1
 
-    except OSError as e:
-        sys.stderr.write("OSError detected while getting SMBIOS information: {0}\n".format(e))
+    except OSError as e1:
+        sys.stderr.write("OSError detected while getting SMBIOS information: {0}\n".format(e1))
         return 2
     except:
         sys.stderr.write("Unknown Error detected while getting SMBIOS information: {0}\n".format(sys.exc_info()[0]))
@@ -448,6 +471,6 @@ def process_smbios(filename):
 
     return 0
 
-ret_val = process_smbios(FILENAME)
+ret_val = process_smbios()
 
 exit(ret_val)

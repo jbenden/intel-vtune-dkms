@@ -105,7 +105,7 @@ static ssize_t vtss_procfs_ctrl_write(struct file *file, const char __user * buf
 
         buf += sizeof(char);
         buf_size -= sizeof(char);
-        TRACE("chr=%c", chr);
+        DEBUG_PROCFS("chr=%c", chr);
         switch (chr) {
         case 'V': { /* VXXXXX.XXXXX client version */
                 int major = 1;
@@ -146,7 +146,7 @@ static ssize_t vtss_procfs_ctrl_write(struct file *file, const char __user * buf
                     } else
                         break;
                 }
-                TRACE("TARGET: pid=%lu", pid);
+                DEBUG_PROCFS("TARGET: pid=%lu", pid);
                 if (pid != 0) {
                     if (vtss_cmd_set_target((pid_t)pid)) {
                         ERROR("Unable to find a target with pid: %lu", pid);
@@ -170,7 +170,7 @@ static ssize_t vtss_procfs_ctrl_write(struct file *file, const char __user * buf
                     /* TODO: For compatibility with old implementation !!! */
                     reqcfg.trace_cfg.trace_flags = flags;
                 }
-                TRACE("INIT: flags=0x%0lX (%lu)", flags, flags);
+                DEBUG_PROCFS("INIT: flags=0x%0lX (%lu)", flags, flags);
                 if (vtss_cmd_start() !=0 )
                 {
                     ERROR("Unable to start collection");
@@ -191,10 +191,8 @@ static ssize_t vtss_procfs_ctrl_write(struct file *file, const char __user * buf
                         break;
                 }
                 vtss_reqcfg_init();
-                TRACE("chr2=%c, size = %d", chr, (int)size);
                 if (chr == '=' && size <= buf_size) {
                     int namespace_size = 0;
-                    TRACE("BEGIN: size=%lu, buf_size=%zu", size, buf_size);
                     while (size != 0) {
                         int cfgreq, fake_shift = 0;
                         trace_cfg_t trace_currreq;
@@ -212,14 +210,13 @@ static ssize_t vtss_procfs_ctrl_write(struct file *file, const char __user * buf
                                 return -EFAULT;
                             }
                         }
-                        TRACE("cfgreq = %lx", (unsigned long)cfgreq);
                         switch (cfgreq) {
                         case VTSS_CFGREQ_VOID:
-                            TRACE("VTSS_CFGREQ_VOID");
+                            DEBUG_PROCFS("VTSS_CFGREQ_VOID");
                             size = 0;
                             break;
                         case VTSS_CFGREQ_CPUEVENT_V1:
-                            TRACE("in reading VTSS_CFGREQ_CPUEVENT_V1, reqcfg.cpuevent_count_v1=%d", (int)reqcfg.cpuevent_count_v1);
+                            DEBUG_PROCFS("VTSS_CFGREQ_CPUEVENT_V1: count_v1=%d", (int)reqcfg.cpuevent_count_v1);
                             if (reqcfg.cpuevent_count_v1 < VTSS_CFG_CHAIN_SIZE) {
                                 if (vtss_copy_from_user(&reqcfg.cpuevent_cfg_v1[reqcfg.cpuevent_count_v1], buf, sizeof(cpuevent_cfg_v1_t))) {
                                     ERROR("Error in copy_from_user()");
@@ -232,7 +229,7 @@ static ssize_t vtss_procfs_ctrl_write(struct file *file, const char __user * buf
                                         ERROR("Error in copy_from_user()");
                                         return -EFAULT;
                                     }
-                                    TRACE("Load event[%02d]: '%s'", reqcfg.cpuevent_count_v1, &reqcfg.cpuevent_namespace_v1[namespace_size]);
+                                    DEBUG_PROCFS("Load event[%02d]: '%s'", reqcfg.cpuevent_count_v1, &reqcfg.cpuevent_namespace_v1[namespace_size]);
                                     /// adjust CPU event record
                                     cpuevent_currreq->name_off = (int)((size_t)&reqcfg.cpuevent_namespace_v1[namespace_size] - (size_t)&reqcfg.cpuevent_cfg_v1[reqcfg.cpuevent_count_v1]);
                                     /// adjust namespace size
@@ -269,7 +266,7 @@ static ssize_t vtss_procfs_ctrl_write(struct file *file, const char __user * buf
                                     ERROR("Error in copy_from_user()");
                                     return -EFAULT;
                                 }
-                                TRACE("VTSS_CFGREQ_OSEVENT[%d]: event_id=%d", reqcfg.osevent_count, reqcfg.osevent_cfg[reqcfg.osevent_count].event_id);
+                                DEBUG_PROCFS("VTSS_CFGREQ_OSEVENT[%d]: event_id=%d", reqcfg.osevent_count, reqcfg.osevent_cfg[reqcfg.osevent_count].event_id);
                                 reqcfg.osevent_count++;
                             }
                             buf += sizeof(osevent_cfg_t);
@@ -281,7 +278,7 @@ static ssize_t vtss_procfs_ctrl_write(struct file *file, const char __user * buf
                                 ERROR("Error in copy_from_user()");
                                 return -EFAULT;
                             }
-                            TRACE("VTSS_CFGREQ_BTS: brcount=%d, modifier=0x%0X", reqcfg.bts_cfg.brcount, reqcfg.bts_cfg.modifier);
+                            DEBUG_PROCFS("VTSS_CFGREQ_BTS: brcount=%d, modifier=0x%0X", reqcfg.bts_cfg.brcount, reqcfg.bts_cfg.modifier);
                             buf += sizeof(bts_cfg_t);
                             buf_size -= sizeof(bts_cfg_t);
                             size -= sizeof(bts_cfg_t);
@@ -291,7 +288,7 @@ static ssize_t vtss_procfs_ctrl_write(struct file *file, const char __user * buf
                                 ERROR("Error in copy_from_user()");
                                 return -EFAULT;
                             }
-                            TRACE("VTSS_CFGREQ_LBR: brcount=%d, modifier=0x%0X", reqcfg.lbr_cfg.brcount, reqcfg.lbr_cfg.modifier);
+                            DEBUG_PROCFS("VTSS_CFGREQ_LBR: brcount=%d, modifier=0x%0X", reqcfg.lbr_cfg.brcount, reqcfg.lbr_cfg.modifier);
                             buf += sizeof(lbr_cfg_t);
                             buf_size -= sizeof(lbr_cfg_t);
                             size -= sizeof(lbr_cfg_t);
@@ -307,7 +304,7 @@ static ssize_t vtss_procfs_ctrl_write(struct file *file, const char __user * buf
                                     return -EFAULT;
                                 }
                             }
-                            TRACE("VTSS_CFGREQ_TRACE: trace_flags=0x%0X, namelen=%d", reqcfg.trace_cfg.trace_flags, trace_currreq.namelen);
+                            DEBUG_PROCFS("VTSS_CFGREQ_TRACE: trace_flags=0x%0X, namelen=%d", reqcfg.trace_cfg.trace_flags, trace_currreq.namelen);
                             buf += sizeof(trace_cfg_t)+(trace_currreq.namelen-1);
                             buf_size -= sizeof(trace_cfg_t)+(trace_currreq.namelen-1);
                             size -= sizeof(trace_cfg_t)+(trace_currreq.namelen-1);
@@ -329,7 +326,7 @@ static ssize_t vtss_procfs_ctrl_write(struct file *file, const char __user * buf
                             while (reqcfg.stk_pg_sz[stk_req.stktype] > reqcfg.stk_sz[stk_req.stktype]) {
                                  reqcfg.stk_pg_sz[stk_req.stktype] = (reqcfg.stk_pg_sz[stk_req.stktype] >> 1);
                             }
-                            TRACE("VTSS_CFGREQ_STK: stk_sz=0x%lx", reqcfg.stk_pg_sz[stk_req.stktype]);
+                            DEBUG_PROCFS("VTSS_CFGREQ_STK: stk_sz=0x%lx", reqcfg.stk_pg_sz[stk_req.stktype]);
                             buf += sizeof(stk_cfg_t);
                             buf_size -= sizeof(stk_cfg_t);
                             size -= sizeof(stk_cfg_t);
@@ -342,19 +339,18 @@ static ssize_t vtss_procfs_ctrl_write(struct file *file, const char __user * buf
                             buf += sizeof(ipt_cfg_t);
                             buf_size -= sizeof(ipt_cfg_t);
                             size -= sizeof(ipt_cfg_t);
-                            TRACE("VTSS_CFGREQ_IPT: reqcfg.ipt_cfg.mode= %X\n", reqcfg.ipt_cfg.mode);
+                            DEBUG_PROCFS("VTSS_CFGREQ_IPT: reqcfg.ipt_cfg.mode= %X\n", reqcfg.ipt_cfg.mode);
                             /* calculate ring buffer size in milliseconds  */
                             reqcfg.ipt_cfg.size = reqcfg.ipt_cfg.size * 1000 + (reqcfg.ipt_cfg.mode>>22);
-                            TRACE("ipt_cfg.mode=%x, ipt_cfg.size=%d", reqcfg.ipt_cfg.mode, reqcfg.ipt_cfg.size);
+                            DEBUG_PROCFS("ipt_cfg.mode=%x, ipt_cfg.size=%d", reqcfg.ipt_cfg.mode, reqcfg.ipt_cfg.size);
                             break;
                         default:
                             ERROR("Incorrect config request 0x%X", cfgreq);
                             return -EFAULT;
                         }
-                        TRACE("LOOP: size=%lu, buf_size=%zu", size, buf_size);
+                        DEBUG_PROCFS("LOOP: size=%lu, buf_size=%zu", size, buf_size);
                     } /* while (size != 0) */
-                    if ((reqcfg.cpuevent_count_v1 == 0 && !(reqcfg.trace_cfg.trace_flags & (VTSS_CFGTRACE_CTX|VTSS_CFGTRACE_PWRACT|VTSS_CFGTRACE_PWRIDLE)))||
-                        (reqcfg.cpuevent_count_v1 == 0 && hardcfg.family == VTSS_FAM_KNX))
+                    if (reqcfg.cpuevent_count_v1 == 0 && !(reqcfg.trace_cfg.trace_flags & (VTSS_CFGTRACE_CTX|VTSS_CFGTRACE_PWRACT|VTSS_CFGTRACE_PWRIDLE)))
                             vtss_cpuevents_reqcfg_default(0, vtss_procfs_defsav());
                     vtss_sysevents_reqcfg_append();
                     if (!vtss_ipt_available())
@@ -375,7 +371,7 @@ static ssize_t vtss_procfs_ctrl_write(struct file *file, const char __user * buf
                             reqcfg.trace_cfg.trace_flags &= ~(VTSS_CFGTRACE_BRANCH | VTSS_CFGTRACE_LASTBR | VTSS_CFGTRACE_LBRCSTK);
                             if (reqcfg.ipt_cfg.mode & vtss_iptmode_full)
                             {
-                                TRACE("VTSS_CFGREQ_IPT: remove stacks, reqcfg.ipt_cfg.mode= %X\n", reqcfg.ipt_cfg.mode);
+                                DEBUG_PROCFS("VTSS_CFGREQ_IPT: remove stacks, ipt_cfg.mode= %X\n", reqcfg.ipt_cfg.mode);
                                 reqcfg.trace_cfg.trace_flags &= ~VTSS_CFGTRACE_STACKS;
                             }
                         }
@@ -408,7 +404,6 @@ static ssize_t vtss_procfs_ctrl_write(struct file *file, const char __user * buf
             DEBUG_PROCFS("Watchdog enable/disable command");
             if (get_user(chr, buf))
                 return -EFAULT;
-            DEBUG_PROCFS("chr = %c", chr);
             buf += sizeof(char);
             buf_size -= sizeof(char);
             if (chr == '0') {
@@ -416,9 +411,9 @@ static ssize_t vtss_procfs_ctrl_write(struct file *file, const char __user * buf
             } else if (chr == '1') {
                 st = vtss_nmi_watchdog_enable(0);
             } else if (chr == 'd') { //internal API
-                st = vtss_nmi_watchdog_disable(1); //for tests.this mode will not increment counter
+                st = vtss_nmi_watchdog_disable(1); //for tests, this mode will not increment counter
             } else if (chr == 'e') { //internal API
-                st = vtss_nmi_watchdog_enable(1); //for test. this mode will not decrement counter
+                st = vtss_nmi_watchdog_enable(1); //for test, this mode will not decrement counter
             } else {
                 st = -1;
                 ERROR("Watchdog command is not recognized");
@@ -432,7 +427,6 @@ static ssize_t vtss_procfs_ctrl_write(struct file *file, const char __user * buf
             {
                 return -EFAULT;
             }
-            DEBUG_PROCFS("chr = %c", chr);
             buf += sizeof(char);
             buf_size -= sizeof(char);
             if (chr == '1')
@@ -471,7 +465,7 @@ int vtss_procfs_ctrl_wake_up(void *msg, size_t size)
     }
     if (size) {
         memcpy(ctld->buf, msg, size);
-        TRACE("msg=['%s', %d]", (char*)msg, (int)size);
+        DEBUG_PROCFS("msg=['%s', %d]", (char*)msg, (int)size);
     } else {
         DEBUG_PROCFS("[EOF]");
     }
@@ -541,7 +535,7 @@ static ssize_t vtss_procfs_ctrl_read(struct file* file, char __user* buf, size_t
     /* write it out */
     rsize = ctld->size;
     if (rsize == 0) {
-        TRACE("file=0x%p: EOF", file);
+        DEBUG_PROCFS("file=0x%p: EOF", file);
         vtss_kfree(ctld);
         return 0;
     }
@@ -557,7 +551,6 @@ static ssize_t vtss_procfs_ctrl_read(struct file* file, char __user* buf, size_t
         return -EFAULT;
     }
     vtss_kfree(ctld);
-    TRACE("rsize = %d", (int)rsize);
 
     return rsize;
 }
@@ -569,7 +562,7 @@ static unsigned int vtss_procfs_ctrl_poll(struct file *file, poll_table * poll_t
 
     if (!atomic_read(&vtss_procfs_attached))
     {
-       TRACE("not attached");
+       DEBUG_PROCFS("not attached");
        return (POLLIN | POLLRDNORM);
     }
     poll_wait(file, &vtss_procfs_ctrl_waitq, poll_table);
@@ -577,7 +570,7 @@ static unsigned int vtss_procfs_ctrl_poll(struct file *file, poll_table * poll_t
     if (!list_empty(&vtss_procfs_ctrl_list))
         rc = (POLLIN | POLLRDNORM);
     vtss_spin_unlock_irqrestore(&vtss_procfs_ctrl_list_lock, flags);
-    TRACE("file=0x%p: %s", file, (rc ? "READY" : "-----"));
+    DEBUG_PROCFS("file=0x%p: %s", file, (rc ? "READY" : "-----"));
     return rc;
 }
 
@@ -594,7 +587,7 @@ static int vtss_procfs_ctrl_open(struct inode *inode, struct file *file)
 static int vtss_procfs_ctrl_close(struct inode *inode, struct file *file)
 {
     if (atomic_dec_and_test(&vtss_procfs_attached)) {
-        TRACE("Nobody is attached");
+        DEBUG_PROCFS("Nobody is attached");
         vtss_procfs_ctrl_flush();
         vtss_cmd_stop_async();
         /* set defaults for next session */
@@ -879,15 +872,13 @@ static ssize_t vtss_procfs_timesrc_write(struct file *file, const char __user * 
     val[3] = '\0';
     if (!strncmp(val, "tsc", 3)) {
         if (check_tsc_unstable()) {
-            ERROR("TSC timesource is unstable. Switching to system time...");
-            //TODO: It's better to return error for the case.This change require testing on systems with TSC reliable and not reliable.
-        } else {
-            vtss_time_source = 1;
+            ERROR("TSC time source is unstable. Try to switch to system time.");
         }
+        vtss_time_source = 1;
     }
     if (!strncmp(val, "sys", 3))
         vtss_time_source = 0;
-    TRACE("time source=%s", vtss_time_source ? "tsc" : "sys");
+    REPORT("Time source: %s", vtss_time_source ? "TSC" : "SYS");
     return count;
 }
 
@@ -950,7 +941,7 @@ static ssize_t vtss_procfs_timelimit_write(struct file *file, const char __user 
             break;
     }
     vtss_time_limit = (cycles_t)val;
-    TRACE("vtss_time_limit=%llu", vtss_time_limit);
+    DEBUG_PROCFS("vtss_time_limit=%llu", vtss_time_limit);
     return count;
 }
 

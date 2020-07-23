@@ -80,6 +80,7 @@ KERNEL_VERSION=`${UNAME} -r`
 MACHINE_TYPE=`${UNAME} -m`
 DRIVER_DIRECTORY=$PWD
 DRIVER_SOURCE_DIRECTORY=$PWD
+UDEV_AVAILABLE="YES"
 
 # ------------------------------ FUNCTIONS -----------------------------------
 
@@ -157,6 +158,9 @@ print_usage_and_exit()
   echo "      \"file\" is pathname of configuration file to read"
   echo "      default VARIABLE=VALUE entries from; NOTE: order of"
   echo "      this option (relative to the other options) matters"
+  echo ""
+  echo "    --no-udev"
+  echo "      build the driver for the system with no device manager"
   echo ""
   exit 0
 }
@@ -284,6 +288,9 @@ while [ $# -gt 0 ] ; do
     --config-file=*)
        config_file=`echo $1 | sed s?^--config-file=??g`
        read_config_file $config_file
+       ;;
+    --no-udev)
+        UDEV_AVAILABLE="NO"
        ;;
     *)
        echo ""

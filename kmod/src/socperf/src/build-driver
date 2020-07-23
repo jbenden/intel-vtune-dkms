@@ -113,6 +113,8 @@ MACHINE_TYPE=`${UNAME} -m`
 DRIVER_DIRECTORY=$PWD
 DRIVER_SOURCE_DIRECTORY=$PWD
 PER_USER_MODE="NO"
+UDEV_AVAILABLE="YES"
+
 
 # ------------------------------ FUNCTIONS -----------------------------------
 
@@ -190,6 +192,9 @@ print_usage_and_exit()
   echo ""
   echo "    --per-user | -pu"
   echo "      build the driver in secure sampling mode"
+  echo ""
+  echo "    --no-udev"
+  echo "      build the driver for the system with no device manager"
   echo ""
   echo ""
   exit 0
@@ -323,6 +328,9 @@ while [ $# -gt 0 ] ; do
        ;;
     --per-user | -pu)
        PER_USER_MODE="YES"
+       ;;
+    --no-udev)
+        UDEV_AVAILABLE="NO"
        ;;
     *)
        echo ""

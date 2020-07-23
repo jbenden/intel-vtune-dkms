@@ -112,6 +112,13 @@
         return return_val;                                                                                     \
     }
 
+#define DRV_CHECK_PTR_N_SET_RET_N_GOTO_CLEANUP(status, ret_var, ret_status, goto_label)                \
+    if (status == NULL) {                                                                              \
+        ret_var = ret_status;                                                                          \
+        LOGIT((LOG_AREA_GENERAL|LOG_LEVEL_ERROR, "%s:%d error %d\n",__FUNCTION__, __LINE__, status));  \
+        goto goto_label;                                                                               \
+    }
+
 #define DRV_CHECK_N_LOG_NO_RETURN(ret_val)                               \
     if ((ret_val) != VT_SUCCESS) {                                       \
         LOG_ERR1(VTSA_T("Operation failed with error code "),(ret_val)); \
@@ -121,6 +128,12 @@
     if ((ret_val) == -1) {                                               \
         LOG_ERR0(VTSA_T("Operation failed with error code = -1"));       \
         return VT_SAM_ERROR;                                             \
+    }
+
+#define DRV_CHECK_N_RET_NEG_ONE_N_CLEANUP(ret_val, gotolabel)            \
+    if ((ret_val) == -1) {                                               \
+        LOG_ERR0(VTSA_T("Operation failed with error code = -1"));       \
+        goto gotolabel;                                                  \
     }
 
 #define DRV_REQUIRES_TRUE_COND_RET_N_FAIL( cond )                        \

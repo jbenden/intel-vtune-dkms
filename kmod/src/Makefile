@@ -144,6 +144,13 @@ else
     endif
 endif
 
+ifeq ($(UDEV_AVAILABLE),NO)
+    EXTRA_CFLAGS += -DDRV_UDEV_UNAVAILABLE
+    $(info ********************************************************************************)
+    $(info WARNING: The device manager is NOT available. It create device files separately.)
+    $(info ********************************************************************************)
+endif
+
 #** <private build only!>
 ifeq ($(BUILD_PUBLIC),YES)
     BUILD_CHIPSET=NO

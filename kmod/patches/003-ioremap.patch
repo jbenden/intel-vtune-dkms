@@ -87,3 +87,37 @@
  /* APIC base MSR */
  #define VTSS_APIC_BASE_MSR       0x01b
  
+--- a/src/socwatch/socwatch_driver/src/sw_ops_provider.c
++++ b/src/socwatch/socwatch_driver/src/sw_ops_provider.c
+@@ -53,6 +53,7 @@
+  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  */
+ 
++#include <linux/version.h>
+ #include <linux/kernel.h>
+ #include <linux/errno.h>
+ #include <linux/pci.h> /* "pci_get_domain_bus_and_slot" */
+@@ -68,6 +69,10 @@
+ #include "sw_telem.h"
+ #include "sw_ops_provider.h"
+ 
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
++#define ioremap_nocache ioremap
++#endif
++
+ /*
+  * Compile time constants.
+  */
+--- a/src/socwatch/socwatch_driver/src/sw_telem.c
++++ b/src/socwatch/socwatch_driver/src/sw_telem.c
+@@ -64,6 +64,10 @@
+ #include "sw_lock_defs.h"       /* Various lock-related definitions */
+ #include "sw_telem.h"           /* Signatures of fn's exported from here. */
+ 
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
++#define ioremap_nocache ioremap
++#endif
++
+ /*
+  * These functions and data structures are exported by the Telemetry
+  * driver.  However, that file may not be available in the kernel for

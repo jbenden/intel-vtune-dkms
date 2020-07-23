@@ -64,7 +64,7 @@
 +#endif
 --- a/src/Makefile
 +++ b/src/Makefile
-@@ -181,6 +181,7 @@ endif
+@@ -188,6 +188,7 @@ endif
  			utility.o         \
  			valleyview_sochap.o    \
  			unc_power.o       \
@@ -80,6 +80,6 @@
                         apic.o dsa.o bts.o pebs.o lbr.o nmiwd.o ipt.o uec.o \
 -                       unwind.o utils.o memory_pool.o
 +                       unwind.o utils.o memory_pool.o ../ksym.o
- ifeq ($(PLATFORM),x32)
- EXTRA_CFLAGS += -DVTSS_ARCH_32
- $(DRIVER_NAME)-objs += sys32.o
+ ifeq ($(PLATFORM),x32_64)
+ $(DRIVER_NAME)-objs += sys64.o
+ endif

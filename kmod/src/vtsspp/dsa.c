@@ -48,7 +48,7 @@ vtss_dsa_t* vtss_dsa_get(int cpu)
 
 void vtss_dsa_init_cpu(void)
 {
-    if (hardcfg.family == VTSS_FAM_P6 || hardcfg.family == VTSS_FAM_P4) {
+    if (hardcfg.family == VTSS_FAM_P6) {
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,19,0)
         vtss_dsa_t *dsa = __get_cpu_var(vtss_dsa_per_cpu);
@@ -128,7 +128,7 @@ static void vtss_dsa_release_buffer(int cpu)
 
 static void vtss_dsa_on_each_cpu_init(void* ctx)
 {
-    if (hardcfg.family == VTSS_FAM_P6 || hardcfg.family == VTSS_FAM_P4) {
+    if (hardcfg.family == VTSS_FAM_P6) {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,19,0)
         rdmsrl(DS_AREA_MSR, __get_cpu_var(vtss_dsa_cpu_msr));
 #else
@@ -139,7 +139,7 @@ static void vtss_dsa_on_each_cpu_init(void* ctx)
 
 static void vtss_dsa_on_each_cpu_fini(void* ctx)
 {
-    if (hardcfg.family == VTSS_FAM_P6 || hardcfg.family == VTSS_FAM_P4) {
+    if (hardcfg.family == VTSS_FAM_P6) {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,19,0)
         wrmsrl(DS_AREA_MSR, __get_cpu_var(vtss_dsa_cpu_msr));
 #else

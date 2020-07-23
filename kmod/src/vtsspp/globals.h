@@ -156,22 +156,15 @@ typedef struct processor_control_block
     /// current task data
     vtss_tcb_t *tcb_ptr;
 
-    /// idle metrics
-    long long idle_duration;
-    long long idle_c1_residency;
-    long long idle_c3_residency;
-    long long idle_c6_residency;
-    long long idle_c7_residency;
-
     /// save area
     int   apic_id;              /// local APIC ID (processor ID)
     void *apic_linear_addr;     /// linear address of local APIC
     void *apic_physical_addr;   /// physical address of local APIC
     gate_desc *idt_base;        /// IDT base address
     gate_desc saved_perfvector; /// saved PMI vector contents
-    long long saved_msr_ovf;    /// saved value of MSR_PERF_GLOBAL_OVF_CTRL
-    long long saved_msr_perf;   /// saved value of MSR_PERF_GLOBAL_CTRL
-    long long saved_msr_debug;  /// saved value of DEBUGCTL_MSR
+    long long saved_msr_ovf;    /// saved value of IA32_PERF_GLOBAL_OVF_CTRL
+    long long saved_msr_perf;   /// saved value of IA32_PERF_GLOBAL_CTRL
+    long long saved_msr_debug;  /// saved value of IA32_DEBUGCTL
 
     /// operating state
     void *bts_ptr;              /// Branch Trace Store pointer
@@ -208,8 +201,6 @@ extern fmtcfg_t       fmtcfg[2];
 extern process_cfg_t  reqcfg;
 extern unsigned long vtss_syscall_rsp_ptr;
 
-//#define VTSS_PT_FLUSH_MODE (reqcfg.ipt_cfg.mode == vtss_iptmode_full && reqcfg.ipt_cfg.size)
-//TODO: rename it to VTSS_FLUSH_MODE everywhere
 #define VTSS_PT_FLUSH_MODE (reqcfg.ipt_cfg.size)
 
 void vtss_globals_fini(void);

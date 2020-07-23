@@ -179,42 +179,18 @@ int vtss_stack_record_lbr(struct vtss_transport_data* trnd, stack_control_t* stk
     return rc;
 }
 
-void* vtss_lbr_correct_ip(void* ip)
-{
-/* TODO: Temporary turn off for investigation */
-#if 0
-    int lbr_idx;
-    long long msr_val; /* Should be signed for ((val << 1) >> 1) */
-
-    if (vtss_lbr_no && !vtss_lbr_msr_ctl && (reqcfg.trace_cfg.trace_flags & VTSS_CFGTRACE_LASTBR)) {
-        rdmsrl(vtss_lbr_msr_tos, msr_val);
-        lbr_idx = msr_val ? (int)msr_val - 1 : vtss_lbr_no - 1;
-        rdmsrl(vtss_lbr_msr_to + lbr_idx, msr_val);
-        TRACE("ip=0x%p, to=0x%llX", ip, msr_val);
-        if ((size_t)ip == (size_t)msr_val) {
-            rdmsrl(vtss_lbr_msr_from + lbr_idx, msr_val);
-            TRACE("from=0x%llX", msr_val);
-            return (void*)(size_t)((msr_val << 1) >> 1);
-        } else
-            return (void*)((char*)ip - 1);
-    }
-#endif
-    return ip;
-}
-
 /* start LBR collection on the processor */
 void vtss_lbr_enable(lbr_control_t* lbrctl)
 {
     unsigned long long msr_val;
 
-    if ((hardcfg.family == VTSS_FAM_P6 || hardcfg.family == VTSS_FAM_P4) && vtss_lbr_no) {
+    if (hardcfg.family == VTSS_FAM_P6 && vtss_lbr_no) {
         if (vtss_lbr_msr_sel) {
             wrmsrl(vtss_lbr_msr_sel, 0ULL);
         }
         rdmsrl(DEBUGCTL_MSR, msr_val);
 
-        msr_val |= (hardcfg.family == VTSS_FAM_P4) ? LBR_ENABLE_MASK_P4 :
-                   (hardcfg.model == VTSS_CPU_HSW || hardcfg.model == VTSS_CPU_HSW_ULT) ? LBR_ENABLE_MASK_HSW : LBR_ENABLE_MASK_P6;
+        msr_val |= (hardcfg.model == VTSS_CPU_HSW || hardcfg.model == VTSS_CPU_HSW_ULT) ? LBR_ENABLE_MASK_HSW : LBR_ENABLE_MASK_P6;
 
         wrmsrl(DEBUGCTL_MSR, 0);
 
@@ -252,9 +228,9 @@ void vtss_lbr_disable(void)
 {
     unsigned long long msr_val;
 
-    if (hardcfg.family == VTSS_FAM_P6 || hardcfg.family == VTSS_FAM_P4) {
+    if (hardcfg.family == VTSS_FAM_P6) {
         rdmsrl(DEBUGCTL_MSR, msr_val);
-        msr_val &= (hardcfg.family == VTSS_FAM_P4) ? ~LBR_ENABLE_MASK_P4 : (hardcfg.model == VTSS_CPU_HSW || hardcfg.model == VTSS_CPU_HSW_ULT) ? ~LBR_ENABLE_MASK_HSW : ~LBR_ENABLE_MASK_P6;
+        msr_val &= (hardcfg.model == VTSS_CPU_HSW || hardcfg.model == VTSS_CPU_HSW_ULT) ? ~LBR_ENABLE_MASK_HSW : ~LBR_ENABLE_MASK_P6;
         wrmsrl(DEBUGCTL_MSR, msr_val);
     }
 }
@@ -264,9 +240,9 @@ void vtss_lbr_disable_save(lbr_control_t* lbrctl)
 {
     unsigned long long msr_val;
 
-    if (hardcfg.family == VTSS_FAM_P6 || hardcfg.family == VTSS_FAM_P4) {
+    if (hardcfg.family == VTSS_FAM_P6) {
         rdmsrl(DEBUGCTL_MSR, msr_val);
-        msr_val &= (hardcfg.family == VTSS_FAM_P4) ? ~LBR_ENABLE_MASK_P4 : (hardcfg.model == VTSS_CPU_HSW || hardcfg.model == VTSS_CPU_HSW_ULT) ? ~LBR_ENABLE_MASK_HSW : ~LBR_ENABLE_MASK_P6;
+        msr_val &= (hardcfg.model == VTSS_CPU_HSW || hardcfg.model == VTSS_CPU_HSW_ULT) ? ~LBR_ENABLE_MASK_HSW : ~LBR_ENABLE_MASK_P6;
         wrmsrl(DEBUGCTL_MSR, msr_val);
     }
     /// save LBR stack
@@ -358,17 +334,6 @@ int vtss_lbr_init(void)
                 vtss_lbr_msr_tos  = 0x01c9;
             }
             break;
-        }
-    } else if (hardcfg.family == VTSS_FAM_P4) {
-        if (hardcfg.model >= 0x03) {
-            vtss_lbr_no       = 16;
-            vtss_lbr_msr_from = 0x0680;
-            vtss_lbr_msr_to   = 0x06c0;
-            vtss_lbr_msr_tos  = 0x01da;
-        } else {
-            vtss_lbr_no       = 4;
-            vtss_lbr_msr_ctl  = 0x01db;
-            vtss_lbr_msr_tos  = 0x01da;
         }
     }
     TRACE("no=%d, ctl=0x%X, from=0x%X, to=0x%X, tos=0x%X",

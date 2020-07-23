@@ -129,7 +129,9 @@ static   struct mutex   ioctl_lock;
 
 static dev_t     lwpmu_DevNum;  /* the major and minor parts for SOCPERF base */
 
+#if !defined(DRV_UDEV_UNAVAILABLE)
 static struct class         *pmu_class   = NULL;
+#endif
 
 #define DRV_DEVICE_DELIMITER "!"
 
@@ -1668,13 +1670,14 @@ socperf_Load (
     }
 
     /* Register the file operations with the OS */
-
+#if !defined(DRV_UDEV_UNAVAILABLE)
     SOCPERF_PRINT("SocPerf Driver: creating device %s...\n", SOCPERF_DRIVER_NAME DRV_DEVICE_DELIMITER"c");
     pmu_class = class_create(THIS_MODULE, SOCPERF_DRIVER_NAME);
     if (IS_ERR(pmu_class)) {
         SOCPERF_PRINT_ERROR("Error registering SocPerf control class\n");
     }
     device_create(pmu_class, NULL, lwpmu_DevNum, NULL, SOCPERF_DRIVER_NAME DRV_DEVICE_DELIMITER"c");
+#endif
 
     status = lwpmu_setup_cdev(socperf_control,&socperf_Fops,lwpmu_DevNum);
     if (status) {
@@ -1721,14 +1724,17 @@ socperf_Unload (
     socperf_pcb                 = SOCPERF_Free_Memory(socperf_pcb);
     socperf_pcb_size            = 0;
 
+#if !defined(DRV_UDEV_UNAVAILABLE)
     unregister_chrdev(MAJOR(lwpmu_DevNum), SOCPERF_DRIVER_NAME);
     device_destroy(pmu_class, lwpmu_DevNum);
-    device_destroy(pmu_class, lwpmu_DevNum+1);
+#endif
 
     cdev_del(&LWPMU_DEV_cdev(socperf_control));
     unregister_chrdev_region(lwpmu_DevNum, PMU_DEVICES);
 
+#if !defined(DRV_UDEV_UNAVAILABLE)
     class_destroy(pmu_class);
+#endif
 
     socperf_control  = SOCPERF_Free_Memory(socperf_control);
 

@@ -267,11 +267,9 @@ void vtss_target_del_empty_transport(struct vtss_transport_data* trnd, struct vt
             if (trnd == trnd_aux) trnd_aux = NULL;
             if (trnd_aux && vtss_transport_delref(trnd_aux) == 0) {
                 vtss_transport_complete(trnd_aux);
-                TRACE("COMPLETE empty aux transport");
             }
             if (trnd && vtss_transport_delref(trnd) == 0) {
                 vtss_transport_complete(trnd);
-                TRACE("COMPLETE empty transport");
             }
             /* NOTE: tskd->trnd will be destroyed in vtss_transport_fini() */
         }
@@ -581,7 +579,7 @@ static void vtss_target_add_mmap_work(VTSS_WORK_STRUCT *work)
     if (atomic_read(&vtss_collector_state) == VTSS_COLLECTOR_UNINITING || vtss_kmap_all(tskd)) {
         ERROR("Kernel map was not loaded completely to the trace");
     }
-    TRACE("(%d:%d): data=0x%p, u=%d, n=%d",
+    DEBUG_COLLECTOR("(%d:%d): data=0x%p, u=%d, n=%d",
         tskd->tid, tskd->pid, tskd, atomic_read(&item->usage), atomic_read(&vtss_target_count));
 out:
     /* release data */
@@ -762,7 +760,7 @@ int vtss_target_new_part1(pid_t tid, pid_t pid, pid_t ppid, vtss_task_map_item_t
     DEBUG_COLLECTOR("(%d:%d): u=%d, n=%d, init='%s'",
         tskd->tid, tskd->pid, atomic_read(&item->usage), atomic_read(&vtss_target_count), tskd->filename);
     task = vtss_find_task_by_tid(tskd->tid);
-    DEBUG_COLLECTOR("Found task = %p", task);
+    DEBUG_COLLECTOR("found task = %p", task);
     if (task != NULL && !(task->state & TASK_DEAD)) { /* task exist */
 #ifdef VTSS_GET_TASK_STRUCT
         vtss_get_task_struct(task);
@@ -822,7 +820,7 @@ int vtss_target_new_part1(pid_t tid, pid_t pid, pid_t ppid, vtss_task_map_item_t
                     ERROR("Task map error");
                 }
             } else {
-                TRACE("Modules are added");
+                DEBUG_COLLECTOR("modules are added");
             }
         }
 #ifdef VTSS_USE_PREEMPT_NOTIFIERS
@@ -1340,7 +1338,7 @@ int vtss_kmap_all(struct vtss_task_data* tskd)
         unsigned long size = mod->core_size;
 #endif
         if (module_is_live(mod)) {
-            TRACE("module: addr=0x%lx, size=%lu, name='%s'", addr, size, name);
+            DEBUG_COLLECTOR("module: addr=0x%lx, size=%lu, name='%s'", addr, size, name);
             if (vtss_record_module(VTSS_PT_FLUSH_MODE ? tskd->trnd : tskd->trnd_aux, 0, addr, size, name, 0, cputsc, realtsc, SAFE)) {
                 TRACE("vtss_record_module() FAIL");
                 repeat = 1;
@@ -1369,7 +1367,7 @@ void vtss_kmap(struct task_struct* task, const char* name, unsigned long addr, u
 
             if (!VTSS_IS_MMAP_INIT(tskd)) {
                 vtss_time_get_sync(&cputsc, &realtsc);
-                TRACE("addr=0x%lx, size=%lu, name='%s', pgoff=%lu", addr, size, name, pgoff);
+                DEBUG_COLLECTOR("addr=0x%lx, size=%lu, name='%s', pgoff=%lu", addr, size, name, pgoff);
                 if (vtss_record_module(VTSS_PT_FLUSH_MODE ? tskd->trnd : tskd->trnd_aux, 0, addr, size, name, pgoff, cputsc, realtsc, SAFE)) {
                     TRACE("vtss_record_module() FAIL");
                 }
@@ -1402,13 +1400,13 @@ int vtss_mmap_all(struct vtss_task_data* tskd, struct task_struct* task)
         vtss_time_get_sync(&cputsc, &realtsc);
         down_read(&mm->mmap_sem);
         for (vma = mm->mmap; vma != NULL; vma = vma->vm_next) {
-            TRACE("vma=[0x%lx - 0x%lx], flags=0x%lx", vma->vm_start, vma->vm_end, vma->vm_flags);
+            DEBUG_COLLECTOR("vma=[0x%lx - 0x%lx], flags=0x%lx", vma->vm_start, vma->vm_end, vma->vm_flags);
             if ((vma->vm_flags & (VM_EXEC | VM_MAYEXEC)) && !(vma->vm_flags & VM_WRITE) &&
                 vma->vm_file && vma->vm_file->f_path.dentry)
             {
                 pname = VTSS_DPATH(vma->vm_file, tmp, PAGE_SIZE);
                 if (!IS_ERR(pname)) {
-                    TRACE("addr=0x%lx, size=%lu, file='%s', pgoff=%lu", vma->vm_start, (vma->vm_end - vma->vm_start), pname, vma->vm_pgoff);
+                    DEBUG_COLLECTOR("addr=0x%lx, size=%lu, file='%s', pgoff=%lu", vma->vm_start, (vma->vm_end - vma->vm_start), pname, vma->vm_pgoff);
                     if (vtss_record_module(VTSS_PT_FLUSH_MODE ? tskd->trnd : tskd->trnd_aux, tskd->m32, vma->vm_start, (vma->vm_end - vma->vm_start), pname, vma->vm_pgoff, cputsc, realtsc, SAFE)) {
                         ERROR("Failed to record module: %s", pname);
                         repeat = 1;
@@ -1435,7 +1433,7 @@ int vtss_mmap_all(struct vtss_task_data* tskd, struct task_struct* task)
                                 char *pname_succ = VTSS_DPATH(vma_succ->vm_file, tmp, PAGE_SIZE);
                                 if (!IS_ERR(pname_succ)) {
                                     if (strcmp(pname_pred, pname_succ) == 0) {
-                                        TRACE("recover vma=[0x%lx - 0x%lx] flags=0x%lx, pgoff=0x%lx, file='%s'", vma->vm_start, vma->vm_end, vma->vm_flags, vma_pred->vm_pgoff + ((vma_pred->vm_end - vma_pred->vm_start) >> PAGE_SHIFT), pname_pred);
+                                        DEBUG_COLLECTOR("recovered vma=[0x%lx - 0x%lx] flags=0x%lx, pgoff=0x%lx, file='%s'", vma->vm_start, vma->vm_end, vma->vm_flags, vma_pred->vm_pgoff + ((vma_pred->vm_end - vma_pred->vm_start) >> PAGE_SHIFT), pname_pred);
                                         if (vtss_record_module(VTSS_PT_FLUSH_MODE ? tskd->trnd : tskd->trnd_aux, tskd->m32, vma->vm_start, (vma->vm_end - vma->vm_start), pname_pred, vma_pred->vm_pgoff + ((vma_pred->vm_end - vma_pred->vm_start) >> PAGE_SHIFT), cputsc, realtsc, SAFE)) {
                                             TRACE("vtss_record_module() FAIL");
                                             repeat = 1;
@@ -1449,7 +1447,7 @@ int vtss_mmap_all(struct vtss_task_data* tskd, struct task_struct* task)
 #endif
             } else if (vma->vm_mm && vma->vm_start == (long)vma->vm_mm->context.vdso) {
                 is_vdso_found = 1;
-                TRACE("addr=0x%lx, size=%lu, name='%s', pgoff=%lu", vma->vm_start, (vma->vm_end - vma->vm_start), "[vdso]", 0UL);
+                DEBUG_COLLECTOR("addr=0x%lx, size=%lu, name='%s', pgoff=%lu", vma->vm_start, (vma->vm_end - vma->vm_start), "[vdso]", 0UL);
                 if (vtss_record_module(VTSS_PT_FLUSH_MODE ? tskd->trnd : tskd->trnd_aux, tskd->m32, vma->vm_start, (vma->vm_end - vma->vm_start), "[vdso]", 0, cputsc, realtsc, SAFE)) {
                     TRACE("vtss_record_module() FAIL");
                     repeat = 1;
@@ -1457,7 +1455,7 @@ int vtss_mmap_all(struct vtss_task_data* tskd, struct task_struct* task)
             }
         }
         if (!is_vdso_found && mm->context.vdso) {
-            TRACE("addr=0x%p, size=%lu, name='%s', pgoff=%lu", mm->context.vdso, PAGE_SIZE, "[vdso]", 0UL);
+            DEBUG_COLLECTOR("addr=0x%p, size=%lu, name='%s', pgoff=%lu", mm->context.vdso, PAGE_SIZE, "[vdso]", 0UL);
             if (vtss_record_module(VTSS_PT_FLUSH_MODE ? tskd->trnd : tskd->trnd_aux, tskd->m32, (unsigned long)((size_t)mm->context.vdso), PAGE_SIZE, "[vdso]", 0, cputsc, realtsc, SAFE)) {
                 TRACE("vtss_record_module() FAIL");
                 repeat = 1;
@@ -1502,7 +1500,7 @@ void vtss_mmap(struct file *file, unsigned long addr, unsigned long pgoff, unsig
                     char* pname = VTSS_DPATH(file, tmp, PAGE_SIZE);
 #endif
                     if (!IS_ERR(pname)) {
-                        TRACE("vma=[0x%lx - 0x%lx], file='%s', pgoff=%lu", addr, addr+size, pname, pgoff);
+                        DEBUG_COLLECTOR("vma=[0x%lx - 0x%lx], file='%s', pgoff=%lu", addr, addr+size, pname, pgoff);
                         if (vtss_record_module(VTSS_PT_FLUSH_MODE ? tskd->trnd : tskd->trnd_aux, tskd->m32, addr, size, pname, pgoff, cputsc, realtsc, SAFE)) {
                             ERROR("Failed to record module: %s", pname);
                         }
@@ -1548,7 +1546,7 @@ void vtss_mmap_reload(struct file *file, unsigned long addr)
                         {
                             pname = VTSS_DPATH(vma->vm_file, tmp, PAGE_SIZE);
                             if (!IS_ERR(pname)) {
-                                TRACE("addr=0x%lx, size=%lu, file='%s', pgoff=%lu", vma->vm_start, (vma->vm_end - vma->vm_start), pname, vma->vm_pgoff);
+                                DEBUG_COLLECTOR("addr=0x%lx, size=%lu, file='%s', pgoff=%lu", vma->vm_start, (vma->vm_end - vma->vm_start), pname, vma->vm_pgoff);
                                 if (vtss_record_module(VTSS_PT_FLUSH_MODE ? tskd->trnd : tskd->trnd_aux, tskd->m32, vma->vm_start, (vma->vm_end - vma->vm_start), pname, vma->vm_pgoff, cputsc, realtsc, SAFE)) {
                                     TRACE("vtss_record_module() FAIL");
                                 }
@@ -2040,28 +2038,14 @@ static void vtss_pmi_dump(struct pt_regs* regs, vtss_task_map_item_t* item, int 
         /* fetch PEBS.IP, if available, or continue as usual */
         vtss_pebs_t* pebs = vtss_pebs_get(cpu);
         if (pebs != NULL) {
-            TRACE("ip = %p, pebs_ip = %llx, eventing_ip = %llx", tskd->ip, pebs->v1.ip, pebs->v3.eventing_ip );
-            if (0) { //vtss_pebs_is_trap())
-                /* correct the trap-IP - disabled to be consistent with SEP   */
-                /* tskd->ip = vtss_lbr_correct_ip((void*)((size_t)pebs->v1.ip)); */
-                if (vtss_pebs_version() == 3) {
-                    tskd->ip = (void*)((size_t)pebs->v3.eventing_ip);
-                } else {
-                    tskd->ip = (void*)((size_t)pebs->v1.ip);
-                }
-                TRACE("in trap");
-            }
-            else {
-                /* fault-IP is already correct */
-                if (vtss_pebs_version() == 3) {
-                    tskd->ip = (void*)((size_t)pebs->v3.eventing_ip);
-                } else {
-                    tskd->ip = (void*)((size_t)pebs->v1.ip);
-                }
-                TRACE("fault-IP is already correct");
+            DEBUG_COLLECTOR("ip=%p, pebs_ip=%llx, eventing_ip=%llx", tskd->ip, pebs->v1.ip, pebs->v3.eventing_ip);
+            if (vtss_pebs_version() == 3) {
+                tskd->ip = (void*)((size_t)pebs->v3.eventing_ip);
+            } else {
+                tskd->ip = (void*)((size_t)pebs->v1.ip);
             }
         } else
-            tskd->ip = vtss_lbr_correct_ip((void*)instruction_pointer(regs));
+            tskd->ip = (void*)instruction_pointer(regs);
         if (likely(VTSS_IS_PMU_SET(tskd))) {
             VTSS_PROFILE(pmu, vtss_cpuevents_sample(tskd->cpuevent_chain));
             tskd->state &= ~VTSS_ST_PMU_SET;
@@ -2705,7 +2689,7 @@ int vtss_cmd_resume(void)
         rc = 0;
     } else if (old_state == VTSS_COLLECTOR_STOPPED) {
         atomic_dec(&vtss_start_paused);
-        TRACE("It's STOPPED. Start paused = %d", atomic_read(&vtss_start_paused));
+        TRACE("It's stopped. Start paused = %d", atomic_read(&vtss_start_paused));
         rc = 0;
     } else {
         /* Resume can be done in PAUSED state only */
@@ -2839,10 +2823,6 @@ int vtss_init(void)
     rc |= vtss_cpuevents_init();
     rc |= vtss_user_vm_init();
     rc |= vtss_procfs_init();
-
-    REPORT("Detected %d CPUs", num_present_cpus());
-    REPORT("CPU family: 0x%02x, model: 0x%02x", hardcfg.family, hardcfg.model);
-    REPORT("Kernel version %d.%d.%d", (LINUX_VERSION_CODE>>16) & 0xff, (LINUX_VERSION_CODE>>8) & 0xff, (LINUX_VERSION_CODE) & 0xff);
 
 #ifdef VTSS_CONFIG_KPTI
     rc |= vtss_cea_init();

@@ -69,6 +69,13 @@ INSTALL = .
 #EXTRA_CFLAGS += -I$(LDDINCDIR) -I$(LDDINCDIR1)
 EXTRA_CFLAGS += -I$(M)/../include -I$(M)/inc
 
+ifeq ($(UDEV_AVAILABLE),NO)
+    EXTRA_CFLAGS += -DDRV_UDEV_UNAVAILABLE
+    $(info ********************************************************************************)
+    $(info WARNING: The device manager is NOT available. It create device files separately.)
+    $(info ********************************************************************************)
+endif
+
 # if ARCH variable is set, unset it to avoid conflicts with kbuild
 unexport ARCH
 

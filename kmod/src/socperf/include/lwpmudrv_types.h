@@ -91,6 +91,14 @@ typedef   U32                             DRV_STATUS;
 
 #define   MAX_STRING_LENGTH             1024
 #define   MAXNAMELEN                     256
+#define	  MAX_PATH_BUFFER_LENGTH        1100
+#define	  MAX_PATH_USER_LENGTH          1024
+
+#if defined (DRV_OS_WINDOWS)
+#define	  WIN_MAX_RELATIVE_PATH_LENGTH   200
+#define	  WIN_VOLUME_LABEL_INDICATOR     L":\\"
+#define	  WIN_PATH_LENGTH_EXTEND_PREFIX  L"\\\\?\\" 
+#endif
 
 #if defined(DRV_OS_WINDOWS)
 #define   UNLINK                        _unlink

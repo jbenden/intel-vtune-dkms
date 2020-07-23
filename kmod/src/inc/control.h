@@ -51,6 +51,7 @@
 // large memory allocation will be used if the requested size (in bytes) is
 // above this threshold
 #define  MAX_KMALLOC_SIZE ((1<<17)-1)
+#define  SEP_DRV_MEMSET   memset
 
 // check whether Linux driver should use unlocked ioctls (not protected by BKL)
 #if defined(HAVE_UNLOCKED_IOCTL)

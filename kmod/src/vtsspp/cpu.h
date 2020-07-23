@@ -30,7 +30,6 @@
 
 #define VTSS_FAM_P4      0x0f
 #define VTSS_FAM_P6      0x06
-#define VTSS_FAM_KNX     0x0b
 
 #define VTSS_CPU_MRM     0x0f
 #define VTSS_CPU_PNR     0x17
@@ -76,9 +75,6 @@
 
 #define VTSS_CPU_KNL    0x57
 #define VTSS_CPU_KNM    0x85
-
-#define VTSS_CPU_KNF    0x00
-#define VTSS_CPU_KNC    0x01
 
 #define VTSS_CPU_ATOM_BNL   0x1c
 #define VTSS_CPU_ATOM_SLW_T 0x35

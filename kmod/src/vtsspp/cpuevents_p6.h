@@ -25,6 +25,8 @@
   invalidate any other reasons why the executable file might be covered by
   the GNU General Public License.
 */
+#ifndef _VTSS_CPUEVENTS_P6_H_
+#define _VTSS_CPUEVENTS_P6_H_
 
 /// P6 event control virtual functions
 static void vf_p6_start(cpuevent_t* this)
@@ -36,11 +38,11 @@ static void vf_p6_stop(cpuevent_t* this)
     int i;
 
     for (i = 0; i < pmu_counter_no; i++) {
-        wrmsrl(IA32_PERFEVTSEL0 + i, 0ULL);
-        wrmsrl(IA32_PMC0        + i, 0ULL);
+        wrmsrl(VTSS_IA32_PERFEVTSEL0 + i, 0ULL);
+        wrmsrl(VTSS_IA32_PMC0        + i, 0ULL);
     }
     if (hardcfg.model >= VTSS_CPU_MRM)
-        wrmsrl(IA32_FIXED_CTR_CTRL, 0ULL);
+        wrmsrl(VTSS_IA32_FIXED_CTR_CTRL, 0ULL);
 }
 
 static void vf_p6_read(cpuevent_t* this)
@@ -52,10 +54,10 @@ static void vf_p6_freeze(cpuevent_t* this)
     int i;
 
     for (i = 0; i < pmu_counter_no; i++) {
-        wrmsrl(IA32_PERFEVTSEL0 + i, 0ULL);
+        wrmsrl(VTSS_IA32_PERFEVTSEL0 + i, 0ULL);
     }
     if (hardcfg.model >= VTSS_CPU_MRM)
-        wrmsrl(IA32_FIXED_CTR_CTRL, 0ULL);
+        wrmsrl(VTSS_IA32_FIXED_CTR_CTRL, 0ULL);
 }
 
 /// with continuous counting mode
@@ -75,7 +77,7 @@ static void vf_p6_restart(cpuevent_t* this)
         {
             /// use the programmed interval
             this->frozen_count = interval = this->interval;
-        } else                  /// underflowed
+        } else  /// underflowed
         {
             /// use the residual count
             this->frozen_count = interval = -interval;
@@ -91,16 +93,16 @@ static void vf_p6_restart(cpuevent_t* this)
         interval = this->interval;
     }
     /// set up counters
-    if (this->selmsr == IA32_FIXED_CTR_CTRL) {
+    if (this->selmsr == VTSS_IA32_FIXED_CTR_CTRL) {
         /// set up the counter
         wrmsrl(this->cntmsr, -interval & pmu_fixed_counter_width_mask);
 
         /// set up the control register
-        rdmsrl(IA32_FIXED_CTR_CTRL, tmp);
+        rdmsrl(VTSS_IA32_FIXED_CTR_CTRL, tmp);
 
         msk = (((this->modifier & VTSS_EVMOD_ALL) >> 16) | 8) << (4 * ((event_modifier_t*)&this->modifier)->cnto);
 
-        wrmsrl(IA32_FIXED_CTR_CTRL, tmp | msk);
+        wrmsrl(VTSS_IA32_FIXED_CTR_CTRL, tmp | msk);
     } else {
         /// set up the counter
         wrmsrl(this->cntmsr, -interval & pmu_counter_width_mask);
@@ -111,18 +113,10 @@ static void vf_p6_restart(cpuevent_t* this)
     if (this->extmsr) {
         wrmsrl(this->extmsr, this->extmsk);
     }
-#if 0
-    /// save timestamp to enable computation of event distribution function
-    this->time[this->state_idx][0] = vtss_time_cpu();
-    this->flux[this->state_idx] = 0;
-#endif
 }
 
 static void vf_p6_freeze_read(cpuevent_t* this)
 {
-#if 0
-    int state_idx = this->state_idx;
-#endif
     long long interval = (this->frozen_count > 0) ? this->frozen_count : (long long)this->interval;
     int shift = 64 - pmu_counter_width;
     int fixed_shift = 64 - pmu_fixed_counter_width;
@@ -132,7 +126,7 @@ static void vf_p6_freeze_read(cpuevent_t* this)
     unsigned long long mask = (((1ULL << pmu_fixed_counter_no) - 1) << 32);
     unsigned long long ovf;
 
-    rdmsrl(IA32_PERF_GLOBAL_STATUS, ovf);
+    rdmsrl(VTSS_IA32_PERF_GLOBAL_STATUS, ovf);
     ovf &= mask;
 
     wrmsrl(this->selmsr, 0ULL);
@@ -142,7 +136,7 @@ static void vf_p6_freeze_read(cpuevent_t* this)
     /// CPU BUG: Correction for broken fixed counters on some Meroms and Penryns
     if (hardcfg.family == VTSS_FAM_P6) {
         if (hardcfg.model == VTSS_CPU_MRM && hardcfg.stepping < 0x0b) {
-            if (this->selmsr == IA32_FIXED_CTR_CTRL) {
+            if (this->selmsr == VTSS_IA32_FIXED_CTR_CTRL) {
                 this->frozen_count = -interval;
             }
         } else if (hardcfg.model == VTSS_CPU_PNR) {
@@ -152,7 +146,7 @@ static void vf_p6_freeze_read(cpuevent_t* this)
         }
     }
     /// convert the count to 64 bits
-    if (this->selmsr == IA32_FIXED_CTR_CTRL) {
+    if (this->selmsr == VTSS_IA32_FIXED_CTR_CTRL) {
         this->frozen_count = (this->frozen_count << fixed_shift) >> fixed_shift;
     } else {
         this->frozen_count = (this->frozen_count << shift) >> shift;
@@ -170,29 +164,15 @@ static void vf_p6_freeze_read(cpuevent_t* this)
             interval = this->frozen_count;
         }
         this->sampled_count += this->frozen_count - interval;
-#if 0
-        /// save event count to enable computation of event distribution function
-        this->flux[state_idx] += this->frozen_count - interval;
-#endif
     } else {
         /// update the accrued count by adding the signed values of current count and sampling interval
         this->sampled_count += interval + this->frozen_count;
-#if 0
-        /// save event count to enable computation of event distribution function
-        this->flux[state_idx] = interval + this->frozen_count;
-#endif
     }
     /// separately preserve counts of overflowed counters, and
     /// uncomment to always save fixed counters (to show performance impact of synchronization on call tree)
-    if ((this->frozen_count >= 0 && this->frozen_count >= this->slave_interval) || (this->selmsr == IA32_FIXED_CTR_CTRL && ovf)) {
+    if ((this->frozen_count >= 0 && this->frozen_count >= this->slave_interval) || (this->selmsr == VTSS_IA32_FIXED_CTR_CTRL && ovf)) {
         this->count = this->sampled_count;
     }
-#if 0
-    /// save timestamp & event count to enable computation of event distribution function
-    this->time[state_idx][1] = vtss_time_cpu();
-    /// toggle the state index
-    this->state_idx = state_idx ^ 1;
-#endif
 }
 
 static void vf_p6_restart_ro(cpuevent_t* this)
@@ -216,7 +196,7 @@ static void vf_p6_freeze_read_ro(cpuevent_t* this)
 static int vf_p6_overflowed(cpuevent_t* this)
 {
     if (this->frozen_count >= 0) {
-        return 1;               // always signal overflow for no sampling mode and in case of real overflow
+        return 1; // always signal overflow for no sampling mode and in case of real overflow
     }
     return 0;
 }
@@ -253,3 +233,4 @@ static cpuevent_i vft_p6 = {
     vf_p6_update_restart,
     vf_p6_select_muxgroup
 };
+#endif

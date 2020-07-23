@@ -100,3 +100,23 @@
      } else
          *ptsc = *preal = tsc;
  }
+--- a/src/socwatch/socwatch_driver/src/sw_trace_notifier_provider.c
++++ b/src/socwatch/socwatch_driver/src/sw_trace_notifier_provider.c
+@@ -707,9 +707,17 @@ static inline u64 sw_tscval(void)
+ 
+ u64 sw_timestamp(void)
+ {
++#if LINUX_VERSION_CODE < KERNEL_VERSION(5,6,0)
+ 	struct timespec ts;
++#else
++	struct timespec64 ts;
++#endif
+ 
++#if LINUX_VERSION_CODE < KERNEL_VERSION(5,6,0)
+ 	getnstimeofday(&ts);
++#else
++	ktime_get_real_ts64(&ts);
++#endif
+ 	return (ts.tv_sec * 1000000000ULL + ts.tv_nsec);
+ }
+ 

@@ -55,9 +55,9 @@ int vtss_bts_overflowed(int cpu)
 void vtss_bts_enable(void)
 {
     unsigned long long msr_val;
-    if (hardcfg.family == VTSS_FAM_P6 || hardcfg.family == VTSS_FAM_P4) {
+    if (hardcfg.family == VTSS_FAM_P6) {
         rdmsrl(DEBUGCTL_MSR, msr_val);
-        msr_val |= (hardcfg.family == VTSS_FAM_P4) ? BTS_ENABLE_MASK_P4 : BTS_ENABLE_MASK_P6;
+        msr_val |= BTS_ENABLE_MASK_P6;
         wrmsrl(DEBUGCTL_MSR, msr_val);
     }
 }
@@ -66,9 +66,9 @@ void vtss_bts_disable(void)
 {
     unsigned long long msr_val;
 
-    if (hardcfg.family == VTSS_FAM_P6 || hardcfg.family == VTSS_FAM_P4) {
+    if (hardcfg.family == VTSS_FAM_P6) {
         rdmsrl(DEBUGCTL_MSR, msr_val);
-        msr_val &= (hardcfg.family == VTSS_FAM_P4) ? ~BTS_ENABLE_MASK_P4 : ~BTS_ENABLE_MASK_P6;
+        msr_val &= ~BTS_ENABLE_MASK_P6;
         wrmsrl(DEBUGCTL_MSR, msr_val);
     }
 }

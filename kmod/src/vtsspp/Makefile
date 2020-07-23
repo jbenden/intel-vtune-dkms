@@ -35,25 +35,25 @@ MARCH ?= $(shell uname -m | sed -e s/i.86/i386/)
 
 # Check for external define from SEP Makefile
 ifeq ($(KERNEL_VERSION),)
-KVER  ?= $(shell uname -r)
+KVER ?= $(shell uname -r)
 else
-KVER  ?= $(KERNEL_VERSION)
+KVER ?= $(KERNEL_VERSION)
 endif
 
 # Check for external define from SEP Makefile
 ifeq ($(KERNEL_SRC_DIR),)
-KDIR  ?= /lib/modules/$(KVER)/build
+KDIR ?= /lib/modules/$(KVER)/build
 else
-KDIR  ?= $(KERNEL_SRC_DIR)
+KDIR ?= $(KERNEL_SRC_DIR)
 endif
 
 PWD := $(shell pwd)
 INSTALL ?= $(PWD)
 PLATFORM := unknown
-ifeq ($(MARCH),i386)
+ifeq ($(MARCH), i386)
 PLATFORM := x32
 endif
-ifeq ($(MARCH),x86_64)
+ifeq ($(MARCH), x86_64)
 PLATFORM := x32_64
 endif
 
@@ -67,19 +67,8 @@ $(DRIVER_NAME)-objs := module.o collector.o procfs.o transport.o record.o \
                        task_map.o globals.o cpuevents.o user_vm.o stack.o \
                        apic.o dsa.o bts.o pebs.o lbr.o nmiwd.o ipt.o uec.o \
                        unwind.o utils.o memory_pool.o
-ifeq ($(PLATFORM),x32)
-EXTRA_CFLAGS += -DVTSS_ARCH_32
-$(DRIVER_NAME)-objs += sys32.o
-endif
 ifeq ($(PLATFORM),x32_64)
-ifneq ($(ARCH),)
-DARCH := $(shell echo $(ARCH) | sed -e s/i386/32/ -e s/x86_// -e s/x86/64/ -e s/[lk]1om/KNX/)
-EXTRA_CFLAGS += -DVTSS_ARCH_$(DARCH)
-$(DRIVER_NAME)-objs += sys$(DARCH).o
-else
-EXTRA_CFLAGS += -DVTSS_ARCH_64
 $(DRIVER_NAME)-objs += sys64.o
-endif
 endif
 
 EXTRA_CFLAGS  += -Wall

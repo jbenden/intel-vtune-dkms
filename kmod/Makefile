@@ -97,6 +97,11 @@ ifeq ($(wildcard $(socperfdir)),)
     socperfdir=
 endif
 
+socwatchdir=$(DRV_CWD)/socwatch/socwatch_driver
+ifeq ($(wildcard $(socwatchdir)),)
+    socwatchdir=
+endif
+
 all: default
 
 modules: default
@@ -104,6 +109,7 @@ modules: default
 default:
 	@(cd $(socperfdir)/src && make all)
 	@cp $(socperfdir)/src/Module*.symvers src/.
+	@(cd $(socwatchdir) && make DO_INTEL_INTERNAL=0 APWR_RED_HAT=0 DO_DEBUG_BUILD=0 DO_PROFILING=0 WAKELOCK_SAMPLE=1 COMMON_INC_DIR=$(DRV_CWD)/socwatch/common/include FILE_NAME=sw_driver MODULE_SYMVERS_FILE=$(socperfdir)/src/Module.symvers default)
 	$(MAKE) -C $(KERNEL_SRC_DIR) M=$(PWD)/src LDDINCDIR=$(PWD)/src/../include LDDINCDIR1=$(PWD)/src/inc modules PWD=$(PWD)/src KBUILD_EXTRA_SYMBOLS=$(socperfdir)/src/Module.symvers
 	cp src/$(DRIVER_NAME).ko src/$(DRIVER_FILENAME)
 	@(cd src/pax && make all)
@@ -119,6 +125,7 @@ clean:
 	rm -rf .tmp_versions )
 	@(cd src/pax && make clean)
 	@(cd $(socperfdir)/src && make clean)
+	@(cd $(socwatchdir) && make clean)
 	@if [ -d src/vtsspp ]; then            \
 		(cd src/vtsspp && make clean); \
 	fi;
@@ -127,6 +134,7 @@ distclean: clean
 	( cd src && rm -f $(DRIVER_NAME)*.ko )
 	@(cd src/pax && make distclean)
 	@(cd $(socperfdir)/src && make distclean)
+	@(cd $(socwatchdir) && make distclean)
 	@if [ -d src/vtsspp ]; then                \
 		(cd src/vtsspp && make distclean); \
 	fi;

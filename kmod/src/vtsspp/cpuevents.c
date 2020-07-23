@@ -29,7 +29,7 @@
 #include "cpuevents.h"
 #include "globals.h"
 #include "collector.h"
-#include "apic.h"               /* for CPU_PERF_VECTOR */
+#include "apic.h"
 #include "time.h"
 
 #include <linux/linkage.h>      /* for asmlinkage */
@@ -44,42 +44,20 @@
 #define CPU_CLKEVT_THRESHOLD 5000LL
 #define CPU_EVTCNT_THRESHOLD 0x80000000LL
 
-#define DEBUGCTL_MSR             0x1d9
-#define MSR_PERF_GLOBAL_OVF_CTRL 0x390
+#define VTSS_IA32_DEBUGCTL 0x1d9
 
-/// P6 MSRs
-#define MSR_PERF_GLOBAL_CTRL 0x38f
-#define IA32_FIXED_CTR_CTRL  0x38d
+#define VTSS_IA32_FIXED_CTR0            0x309
+#define VTSS_IA32_FIXED_CTR_CTRL        0x38d
+#define VTSS_IA32_PERF_GLOBAL_STATUS    0x38e
+#define VTSS_IA32_PERF_GLOBAL_CTRL      0x38f
+#define VTSS_IA32_PERF_GLOBAL_OVF_CTRL  0x390
 
-#define IA32_FIXED_CTR0      0x309 //instruction ret counter
-      //IA32_FIXED_CTR0+1)           core counter
-      //IA32_FIXED_CTR0+2            ref counter
+#define VTSS_IA32_PERFEVTSEL0   0x186
+#define VTSS_IA32_PMC0          0x0c1
 
-#define IA32_PERFEVTSEL0     0x186
-#define IA32_PMC0            0x0c1
-
-#define IA32_PERF_GLOBAL_STATUS     0x38e
-
-/// SNB power MSRs
-#define VTSS_MSR_PKG_ENERGY_STATUS  0x611
-#define VTSS_MSR_PP0_ENERGY_STATUS  0x639
-#define VTSS_MSR_PP1_ENERGY_STATUS  0x641    /// 06_2a
-#define VTSS_MSR_DRAM_ENERGY_STATUS 0x619    /// 06_2d
-
-/// NHM/SNB C-state residency MSRs
-#define VTSS_MSR_CORE_C3_RESIDENCY 0x3fc
-#define VTSS_MSR_CORE_C6_RESIDENCY 0x3fd
-#define VTSS_MSR_CORE_C7_RESIDENCY 0x3fe ///SNB
-
-/* Knight family, KNC */
-#define KNX_CORE_PMC0                   0x20
-#define KNX_CORE_PMC1                   0x21
-#define KNX_CORE_PERFEVTSEL0            0x28
-#define KNX_CORE_PERFEVTSEL1            0x29
-#define KNC_PERF_SPFLT_CTRL             0x2C         // KNC only
-#define KNX_CORE_PERF_GLOBAL_STATUS     0x2D
-#define KNX_CORE_PERF_GLOBAL_OVF_CTRL   0x2E
-#define KNX_CORE_PERF_GLOBAL_CTRL       0x2F
+#define VTSS_MSR_OFFCORE_RSP_0  0x1a6
+#define VTSS_MSR_PEBS_LD_LAT    0x3f6
+#define VTSS_MSR_PEBS_FRONTEND  0x3f7
 
 /**
  * Globals for CPU Monitoring Functionality
@@ -95,27 +73,6 @@ static atomic_t  vtss_cpuevents_active = ATOMIC_INIT(0);
 
 /// event descriptors
 cpuevent_desc_t cpuevent_desc[CPU_EVENTS_SUPPORTED];
-sysevent_desc_t sysevent_desc[] = {
-    {"Synchronization Context Switches", "Thread being swapped out due to contention on a synchronization object"},
-    {"Preemption Context Switches", "Thread being preempted by the OS scheduler"},
-    {"Wait Time", "Time while the thread is waiting on a synchronization object"},
-    {"Inactive Time", "Time while the thread is preempted and resides in the ready queue"},
-    {"Idle Time", "Time while no other thread was active before activating the current thread"},
-    {"Idle Wakeup", "Thread waking up the system from idleness"},
-    {"C3 Residency", "Time in low power sleep mode with all but the shared cache flushed"},
-    {"C6 Residency", "Time in low power sleep mode with all caches flushed"},
-    {"C7 Residency", "Time in low power sleep mode with all caches flushed and powered off"},
-    {"Energy Core", "Energy (uJoules) consumed by the processor core"},
-    {"Energy GFX", "Energy (uJoules) consumed by the uncore graphics"},
-    {"Energy Pack", "Energy (uJoules) consumed by the processor package"},
-    {"Energy DRAM", "Energy (uJoules) consumed by the memory"},
-    {"Charge SoC", "Charge (Coulombs) consumed by the system"},
-#ifdef VTSS_SYSCALL_TRACE
-    {"Syscalls", "The number of calls to OS functions"},
-    {"Syscalls Time", "Time spent in system calls"},
-#endif
-    {NULL, NULL}
-};
 
 extern void vtss_perfvec_handler(void);
 
@@ -127,23 +84,11 @@ void vtss_cpuevents_enable(void)
     if (hardcfg.family == VTSS_FAM_P6 && hardcfg.model >= VTSS_CPU_MRM) {
         unsigned long long mask = (((1ULL << pmu_fixed_counter_no) - 1) << 32) | ((1ULL << pmu_counter_no) - 1);
 
-        TRACE("MSR(0x%x)<=0x%llx", MSR_PERF_GLOBAL_CTRL, mask);
-        wrmsrl(MSR_PERF_GLOBAL_CTRL, mask);
+        TRACE("MSR(0x%x)<=0x%llx", VTSS_IA32_PERF_GLOBAL_CTRL, mask);
+        wrmsrl(VTSS_IA32_PERF_GLOBAL_CTRL, mask);
         mask |= 3ULL << 62;
-        TRACE("MSR(0x%x)<=0x%llx", MSR_PERF_GLOBAL_OVF_CTRL, mask);
-        wrmsrl(MSR_PERF_GLOBAL_OVF_CTRL, mask);
-    } else if (hardcfg.family == VTSS_FAM_KNX) {
-        unsigned long long mask = (1ULL << pmu_counter_no) - 1;
-
-        TRACE("MSR(0x%x)<=0x%llx", KNX_CORE_PERF_GLOBAL_CTRL, mask);
-        wrmsrl(KNX_CORE_PERF_GLOBAL_CTRL, mask);
-        if (hardcfg.model == VTSS_CPU_KNC) { // KNC Only
-            TRACE("MSR(0x%x)<=0x%llx", KNX_CORE_PERF_GLOBAL_OVF_CTRL, mask);
-            wrmsrl(KNX_CORE_PERF_GLOBAL_OVF_CTRL, mask);
-            mask |= 1ULL << 63;
-            TRACE("MSR(0x%x)<=0x%llx", KNC_PERF_SPFLT_CTRL, mask);
-            wrmsrl(KNC_PERF_SPFLT_CTRL, mask);
-        }
+        TRACE("MSR(0x%x)<=0x%llx", VTSS_IA32_PERF_GLOBAL_OVF_CTRL, mask);
+        wrmsrl(VTSS_IA32_PERF_GLOBAL_OVF_CTRL, mask);
     }
 }
 
@@ -161,9 +106,8 @@ void vtss_cpuevents_freeze(void)
     }
 }
 
-#include "cpuevents_p6.c"
-#include "cpuevents_knx.c"
-#include "cpuevents_sys.c"
+#include "cpuevents_p6.h"
+#include "cpuevents_sys.h"
 
 void vtss_cpuevents_reqcfg_default(int need_clear, int defsav)
 {
@@ -171,7 +115,6 @@ void vtss_cpuevents_reqcfg_default(int need_clear, int defsav)
     int mux_cnt = 0;
     int namespace_size = 0;
 
-    DEBUG_CPUEVT("reqcfg.cpuevent_count_v1 = %d", (int)reqcfg.cpuevent_count_v1);
     if (need_clear) {
         memset(&reqcfg, 0, sizeof(process_cfg_t));
         reqcfg.trace_cfg.trace_flags =  VTSS_CFGTRACE_CTX    | VTSS_CFGTRACE_CPUEV   |
@@ -179,7 +122,6 @@ void vtss_cpuevents_reqcfg_default(int need_clear, int defsav)
                                         VTSS_CFGTRACE_SAMPLE | VTSS_CFGTRACE_OSEV    |
                                         VTSS_CFGTRACE_MODULE | VTSS_CFGTRACE_PROCTHR |
                                         VTSS_CFGTRACE_STACKS | VTSS_CFGTRACE_TREE;
-        TRACE("trace_flags=0x%0X (%u)", reqcfg.trace_cfg.trace_flags, reqcfg.trace_cfg.trace_flags);
     }
     for (i = 0; i < CPU_EVENTS_SUPPORTED; i++) {
         if (i > 1 && hardcfg.family != 0x06)
@@ -213,8 +155,6 @@ void vtss_cpuevents_reqcfg_default(int need_clear, int defsav)
             reqcfg.cpuevent_cfg_v1[reqcfg.cpuevent_count_v1].interval = defsav;
         } else if (hardcfg.family == VTSS_FAM_P6) {
             reqcfg.cpuevent_cfg_v1[reqcfg.cpuevent_count_v1].interval = 2000000;
-        } else if (hardcfg.family == VTSS_FAM_KNX) {
-            reqcfg.cpuevent_cfg_v1[reqcfg.cpuevent_count_v1].interval = 20000000;
         } else {
             reqcfg.cpuevent_cfg_v1[reqcfg.cpuevent_count_v1].interval = 10000000;
         }
@@ -250,7 +190,6 @@ void vtss_sysevents_reqcfg_append(void)
     const int active_last = 13;
     int sys_event_idx = 2;
 
-    DEBUG_CPUEVT("reqcfg.cpuevent_count_v1 = %d", (int)reqcfg.cpuevent_count_v1);
     /* Find out the count of mux groups and namespace size */
     for (i = 0; i < reqcfg.cpuevent_count_v1; i++) {
         mux_grp = (mux_grp < reqcfg.cpuevent_cfg_v1[i].mux_grp) ? reqcfg.cpuevent_cfg_v1[i].mux_grp : mux_grp;
@@ -258,17 +197,16 @@ void vtss_sysevents_reqcfg_append(void)
     }
     /* insert system event records (w/names) into each mux_grp */
     for (i = sys_event_idx; i < vtss_sysevent_end && reqcfg.cpuevent_count_v1 < VTSS_CFG_CHAIN_SIZE; i++) {
+
         if (sysevent_type[i] == vtss_sysevent_end) {
             /* skip events that are not supported on this architecture */
             continue;
         }
-        if (i >= idle_idx && i <= idle_last && (!( reqcfg.trace_cfg.trace_flags & VTSS_CFGTRACE_PWRIDLE)))
-        {
+        if (i >= idle_idx && i <= idle_last && (!(reqcfg.trace_cfg.trace_flags & VTSS_CFGTRACE_PWRIDLE))) {
             // idle power not required
             continue;
         }
-        if (i >= active_idx && i <= active_last && (!( reqcfg.trace_cfg.trace_flags & VTSS_CFGTRACE_PWRACT)))
-        {
+        if (i >= active_idx && i <= active_last && (!(reqcfg.trace_cfg.trace_flags & VTSS_CFGTRACE_PWRACT))) {
             // active power not required
             continue;
         }
@@ -309,6 +247,33 @@ void vtss_sysevents_reqcfg_append(void)
     }
 }
 
+static void vtss_cpuevents_validate_event(cpuevent_t* event, char *name)
+{
+    if ((event->selmsr < VTSS_IA32_PERFEVTSEL0 || event->selmsr >= VTSS_IA32_PERFEVTSEL0 + pmu_counter_no) &&
+        event->selmsr != VTSS_IA32_FIXED_CTR_CTRL)
+    {
+        ERROR("%s: Bad event select MSR: 0x%x", name, event->selmsr);
+        event->selmsr = VTSS_IA32_PERFEVTSEL0;
+        event->selmsk = 0;
+        event->cntmsr = VTSS_IA32_PMC0;
+    }
+    if ((event->cntmsr < VTSS_IA32_PMC0       || event->cntmsr >= VTSS_IA32_PMC0       + pmu_counter_no) &&
+        (event->cntmsr < VTSS_IA32_FIXED_CTR0 || event->cntmsr >= VTSS_IA32_FIXED_CTR0 + pmu_counter_no))
+    {
+        ERROR("%s: Bad control MSR: 0x%x", name, event->cntmsr);
+        event->selmsr = VTSS_IA32_PERFEVTSEL0;
+        event->selmsk = 0;
+        event->cntmsr = VTSS_IA32_PMC0;
+    }
+    if (event->extmsr && (event->extmsr != VTSS_MSR_OFFCORE_RSP_0 && event->extmsr != VTSS_MSR_OFFCORE_RSP_0 + 1 &&
+                          event->extmsr != VTSS_MSR_PEBS_LD_LAT   && event->extmsr != VTSS_MSR_PEBS_FRONTEND))
+    {
+        ERROR("%s: Bad extra MSR: 0x%x", name, event->extmsr);
+        event->extmsr = 0;
+        event->extmsk = 0;
+    }
+}
+
 // called from process_init() to form a common event chain from the configuration records
 void vtss_cpuevents_upload(cpuevent_t* cpuevent_chain, cpuevent_cfg_v1_t* cpuevent_cfg, int count)
 {
@@ -318,13 +283,11 @@ void vtss_cpuevents_upload(cpuevent_t* cpuevent_chain, cpuevent_cfg_v1_t* cpueve
     int fixed_cnt[3];
     int fixed_cnt_slave = 0;
 
-    fixed_cnt[0]=fixed_cnt[1]=fixed_cnt[2]=-1;
-    DEBUG_CPUEVT("reqcfg.cpuevent_count_v1 = %d", (int)reqcfg.cpuevent_count_v1);
+    fixed_cnt[0] = fixed_cnt[1] = fixed_cnt[2] = -1;
 
     for (i = 0; i < count; i++) {
         cpuevent_chain[i].valid = 1;
-        if (reqcfg.ipt_cfg.mode & vtss_iptmode_full)
-        {
+        if (reqcfg.ipt_cfg.mode & vtss_iptmode_full) {
             cpuevent_cfg[i].interval = 0;
             cpuevent_cfg[i].cntmsr.val = 0;
         }
@@ -364,25 +327,19 @@ void vtss_cpuevents_upload(cpuevent_t* cpuevent_chain, cpuevent_cfg_v1_t* cpueve
                 cpuevent_cfg[i].interval = cpuevent_chain[i].interval;
             }
             /// set up counter offset for fixed events
-            if (hardcfg.family == VTSS_FAM_P6 && cpuevent_cfg[i].selmsr.idx == IA32_FIXED_CTR_CTRL) {
-                if (cpuevent_cfg[i].cntmsr.idx - IA32_FIXED_CTR0 < 3 && cpuevent_cfg[i].cntmsr.idx - IA32_FIXED_CTR0 >= 0)
+            if (hardcfg.family == VTSS_FAM_P6 && cpuevent_cfg[i].selmsr.idx == VTSS_IA32_FIXED_CTR_CTRL) {
+                if (cpuevent_cfg[i].cntmsr.idx - VTSS_IA32_FIXED_CTR0 < 3 && cpuevent_cfg[i].cntmsr.idx - VTSS_IA32_FIXED_CTR0 >= 0)
                 {
-                    fixed_cnt[cpuevent_cfg[i].cntmsr.idx - IA32_FIXED_CTR0]=i;
+                    fixed_cnt[cpuevent_cfg[i].cntmsr.idx - VTSS_IA32_FIXED_CTR0] = i;
                 }
                 /// form the modifier to enable correct masking of control MSR in vft->restart()
                 cpuevent_chain[i].modifier = (int)((cpuevent_cfg[i].selmsr.val >>
-                                                   (4 * (cpuevent_cfg[i].cntmsr.idx - IA32_FIXED_CTR0))) << 16);
-                ((event_modifier_t*)&cpuevent_chain[i].modifier)->cnto = cpuevent_cfg[i].cntmsr.idx - IA32_FIXED_CTR0;
+                                                   (4 * (cpuevent_cfg[i].cntmsr.idx - VTSS_IA32_FIXED_CTR0))) << 16);
+                ((event_modifier_t*)&cpuevent_chain[i].modifier)->cnto = cpuevent_cfg[i].cntmsr.idx - VTSS_IA32_FIXED_CTR0;
             } else {
                 cpuevent_chain[i].modifier = (int)(cpuevent_cfg[i].selmsr.val & VTSS_EVMOD_ALL);
             }
-            if (hardcfg.family == VTSS_FAM_KNX) {
-                /// set up counter events as slaves (that follow leading events)
-                if (cpuevent_cfg[i].cntmsr.idx > KNX_CORE_PMC0) {
-                    cpuevent_chain[i].slave_interval = cpuevent_cfg[i].interval;
-                    cpuevent_chain[i].interval = 0;
-                }
-            }
+            vtss_cpuevents_validate_event(cpuevent_chain + i, (char*)&cpuevent_cfg[i] + cpuevent_cfg[i].name_off);
         }
         cpuevent_chain[i].mux_grp = cpuevent_cfg[i].mux_grp;
         cpuevent_chain[i].mux_alg = cpuevent_cfg[i].mux_alg;
@@ -397,11 +354,9 @@ void vtss_cpuevents_upload(cpuevent_t* cpuevent_chain, cpuevent_cfg_v1_t* cpueve
         );
     }
 
-    for (j = 2; j>=0; j--)
-    {
+    for (j = 2; j>=0; j--) {
         if (fixed_cnt[j] == -1) continue;
-        if (fixed_cnt_slave == 0)
-        {
+        if (fixed_cnt_slave == 0) {
             fixed_cnt_slave = 1;
             continue;
         }
@@ -411,10 +366,6 @@ void vtss_cpuevents_upload(cpuevent_t* cpuevent_chain, cpuevent_cfg_v1_t* cpueve
     }
     if (i) {
         cpuevent_chain[0].mux_cnt = mux_cnt;
-        if (hardcfg.family == VTSS_FAM_P6) {
-            /* force LBR collection to correct sampled IPs */
-            reqcfg.trace_cfg.trace_flags |= VTSS_CFGTRACE_LASTBR;
-        }
     }
 }
 
@@ -423,8 +374,8 @@ int vtss_cpuevents_get_sampling_interval(void)
     int i;
 
     for (i = 0; i < reqcfg.cpuevent_count_v1; i++) {
-        if (hardcfg.family == VTSS_FAM_P6 && reqcfg.cpuevent_cfg_v1[i].selmsr.idx == IA32_FIXED_CTR_CTRL) {
-            if ((reqcfg.cpuevent_cfg_v1[i].cntmsr.idx - IA32_FIXED_CTR0) == 2) {
+        if (hardcfg.family == VTSS_FAM_P6 && reqcfg.cpuevent_cfg_v1[i].selmsr.idx == VTSS_IA32_FIXED_CTR_CTRL) {
+            if ((reqcfg.cpuevent_cfg_v1[i].cntmsr.idx - VTSS_IA32_FIXED_CTR0) == 2) {
                 unsigned int sav = *(unsigned int*)&reqcfg.cpuevent_cfg_v1[i].interval;
                 if (sav > 0 && hardcfg.cpu_freq > 0 && hardcfg.cpu_freq > sav) {
                     if (hardcfg.cpu_freq/sav < 1000)
@@ -475,40 +426,6 @@ void vtss_cpuevents_quantum_border(cpuevent_t* cpuevent_chain, int flag)
         ERROR("CPU event chain is empty");
         return;
     }
-#if 0
-    /// compute idle characteristics
-    if (0 /*tidx == pcb_cpu.idle_tidx*/) {
-        long long tmp;
-        if (flag == 1) { /* switch_to */
-            pcb_cpu.idle_c1_residency = vtss_time_cpu();
-
-            if (sysevent_type[vtss_sysevent_idle_c3] != vtss_sysevent_end) {
-                rdmsrl(VTSS_MSR_CORE_C3_RESIDENCY, pcb_cpu.idle_c3_residency);
-                rdmsrl(VTSS_MSR_CORE_C6_RESIDENCY, pcb_cpu.idle_c6_residency);
-            }
-            if (sysevent_type[vtss_sysevent_idle_c7] != vtss_sysevent_end) {
-                rdmsrl(VTSS_MSR_CORE_C7_RESIDENCY, pcb_cpu.idle_c7_residency);
-            }
-        } else if (pcb_cpu.idle_c1_residency) {
-            pcb_cpu.idle_duration = vtss_time_cpu() - pcb_cpu.idle_c1_residency;
-            pcb_cpu.idle_c1_residency = 0;
-
-            if (sysevent_type[vtss_sysevent_idle_c3] != vtss_sysevent_end) {
-                rdmsrl(VTSS_MSR_CORE_C3_RESIDENCY, tmp);
-                pcb_cpu.idle_c3_residency = tmp - pcb_cpu.idle_c3_residency;
-                rdmsrl(VTSS_MSR_CORE_C6_RESIDENCY, tmp);
-                pcb_cpu.idle_c6_residency = tmp - pcb_cpu.idle_c6_residency;
-            }
-            if (sysevent_type[vtss_sysevent_idle_c7] != vtss_sysevent_end) {
-                rdmsrl(VTSS_MSR_CORE_C7_RESIDENCY, tmp);
-                pcb_cpu.idle_c7_residency = tmp - pcb_cpu.idle_c7_residency;
-            }
-        }
-        if (pcb_cpu.idle_duration < 0 || pcb_cpu.idle_c3_residency < 0 || pcb_cpu.idle_c6_residency < 0 || pcb_cpu.idle_c7_residency < 0) {
-            pcb_cpu.idle_duration = pcb_cpu.idle_c3_residency = pcb_cpu.idle_c6_residency = pcb_cpu.idle_c7_residency = 0;
-        }
-    }
-#endif
     for (i = 0; i < VTSS_CFG_CHAIN_SIZE && cpuevent_chain[i].valid; i++) {
         TRACE("[%02d]: mux_idx=%d, mux_grp=%d of %d %s flag=%d", i,
               cpuevent_chain[i].mux_idx, cpuevent_chain[i].mux_grp, cpuevent_chain[i].mux_cnt,
@@ -518,16 +435,6 @@ void vtss_cpuevents_quantum_border(cpuevent_t* cpuevent_chain, int flag)
         cpuevent_chain[i].tmp = flag;
         cpuevent_chain[i].vft->update_restart((cpuevent_t*)&cpuevent_chain[i]);
     }
-#if 0
-    /// flush idleness data
-    if (0 /*tidx != pcb_cpu.idle_tidx*/) {
-        pcb_cpu.idle_duration     = 0;
-        pcb_cpu.idle_c1_residency = 0;
-        pcb_cpu.idle_c3_residency = 0;
-        pcb_cpu.idle_c6_residency = 0;
-        pcb_cpu.idle_c7_residency = 0;
-    }
-#endif
 }
 
 // called from swap_in() and pmi_handler()
@@ -628,17 +535,12 @@ static void vtss_cpuevents_save(void *ctx)
 
     local_irq_save(flags);
     if (hardcfg.family == VTSS_FAM_P6 && hardcfg.model >= VTSS_CPU_MRM) {
-        rdmsrl(MSR_PERF_GLOBAL_OVF_CTRL, pcb_cpu.saved_msr_ovf);
-        wrmsrl(MSR_PERF_GLOBAL_OVF_CTRL, 0ULL);
-        rdmsrl(MSR_PERF_GLOBAL_CTRL,     pcb_cpu.saved_msr_perf);
-        wrmsrl(MSR_PERF_GLOBAL_CTRL,     0ULL);
-        rdmsrl(DEBUGCTL_MSR,             pcb_cpu.saved_msr_debug);
-        wrmsrl(DEBUGCTL_MSR,             0ULL);
-    } else if (hardcfg.family == VTSS_FAM_KNX) {
-        rdmsrl(KNX_CORE_PERF_GLOBAL_OVF_CTRL, pcb_cpu.saved_msr_ovf);
-        wrmsrl(KNX_CORE_PERF_GLOBAL_OVF_CTRL, 0ULL);
-        rdmsrl(KNX_CORE_PERF_GLOBAL_CTRL,     pcb_cpu.saved_msr_perf);
-        wrmsrl(KNX_CORE_PERF_GLOBAL_CTRL,     0ULL);
+        rdmsrl(VTSS_IA32_PERF_GLOBAL_OVF_CTRL, pcb_cpu.saved_msr_ovf);
+        wrmsrl(VTSS_IA32_PERF_GLOBAL_OVF_CTRL, 0ULL);
+        rdmsrl(VTSS_IA32_PERF_GLOBAL_CTRL,     pcb_cpu.saved_msr_perf);
+        wrmsrl(VTSS_IA32_PERF_GLOBAL_CTRL,     0ULL);
+        rdmsrl(VTSS_IA32_DEBUGCTL,             pcb_cpu.saved_msr_debug);
+        wrmsrl(VTSS_IA32_DEBUGCTL,             0ULL);
     }
 #ifdef VTSS_USE_NMI
     pcb_cpu.saved_apic_lvtpc = apic_read(APIC_LVTPC);
@@ -661,12 +563,9 @@ static void vtss_cpuevents_stop_all(void *ctx)
     vtss_pmi_disable();
     vtss_cpuevents_stop();
     if (hardcfg.family == VTSS_FAM_P6 && hardcfg.model >= VTSS_CPU_MRM) {
-        wrmsrl(MSR_PERF_GLOBAL_OVF_CTRL, 0ULL);
-        wrmsrl(MSR_PERF_GLOBAL_CTRL,     0ULL);
-        wrmsrl(DEBUGCTL_MSR,             0ULL);
-    } else if (hardcfg.family == VTSS_FAM_KNX) {
-        wrmsrl(KNX_CORE_PERF_GLOBAL_OVF_CTRL, 0ULL);
-        wrmsrl(KNX_CORE_PERF_GLOBAL_CTRL,     0ULL);
+        wrmsrl(VTSS_IA32_PERF_GLOBAL_OVF_CTRL, 0ULL);
+        wrmsrl(VTSS_IA32_PERF_GLOBAL_CTRL,     0ULL);
+        wrmsrl(VTSS_IA32_DEBUGCTL,             0ULL);
     }
     local_irq_restore(flags);
 }
@@ -683,12 +582,9 @@ static void vtss_cpuevents_restore(void *ctx)
 
     local_irq_save(flags);
     if (hardcfg.family == VTSS_FAM_P6 && hardcfg.model >= VTSS_CPU_MRM) {
-        wrmsrl(MSR_PERF_GLOBAL_OVF_CTRL, pcb_cpu.saved_msr_ovf);
-        wrmsrl(MSR_PERF_GLOBAL_CTRL,     pcb_cpu.saved_msr_perf);
-        wrmsrl(DEBUGCTL_MSR,             pcb_cpu.saved_msr_debug);
-    } else if (hardcfg.family == VTSS_FAM_KNX) {
-        wrmsrl(KNX_CORE_PERF_GLOBAL_OVF_CTRL, pcb_cpu.saved_msr_ovf);
-        wrmsrl(KNX_CORE_PERF_GLOBAL_CTRL,     pcb_cpu.saved_msr_perf);
+        wrmsrl(VTSS_IA32_PERF_GLOBAL_OVF_CTRL, pcb_cpu.saved_msr_ovf);
+        wrmsrl(VTSS_IA32_PERF_GLOBAL_CTRL,     pcb_cpu.saved_msr_perf);
+        wrmsrl(VTSS_IA32_DEBUGCTL,             pcb_cpu.saved_msr_debug);
     }
 #ifdef VTSS_USE_NMI
     apic_write(APIC_LVTPC, pcb_cpu.saved_apic_lvtpc);
@@ -747,7 +643,7 @@ static int vtss_nmi_handler(unsigned int cmd, struct pt_regs *regs)
     int state = VTSS_COLLECTOR_STATE();
 
     if (hardcfg.family == VTSS_FAM_P6 && hardcfg.model >= VTSS_CPU_MRM) {
-        wrmsrl(DEBUGCTL_MSR, 0ULL);
+        wrmsrl(VTSS_IA32_DEBUGCTL, 0ULL);
     }
     if (state >= VTSS_COLLECTOR_RUNNING) {
         vtss_pmi_handler(regs);
@@ -772,7 +668,7 @@ static int vtss_nmi_handler(struct notifier_block *self, unsigned long val, void
             case DIE_NMI_IPI:
 #endif
                 if (hardcfg.family == VTSS_FAM_P6 && hardcfg.model >= VTSS_CPU_MRM) {
-                    wrmsrl(DEBUGCTL_MSR, 0ULL);
+                    wrmsrl(VTSS_IA32_DEBUGCTL, 0ULL);
                 }
                 if (state >= VTSS_COLLECTOR_RUNNING) {
                     vtss_pmi_handler(args->regs);
@@ -800,11 +696,9 @@ static struct notifier_block vtss_notifier = {
 
 int vtss_cpuevents_init_pmu(int defsav)
 {
-    REPORT("PMU: counters: %d", (int)reqcfg.cpuevent_count_v1);
+    REPORT("PMU: uploading %d events", (int)reqcfg.cpuevent_count_v1);
     atomic_set(&vtss_cpuevents_active, 1);
-    if ((reqcfg.cpuevent_count_v1 == 0 && !(reqcfg.trace_cfg.trace_flags & (VTSS_CFGTRACE_CTX|VTSS_CFGTRACE_PWRACT|VTSS_CFGTRACE_PWRIDLE)))||
-        (reqcfg.cpuevent_count_v1 == 0 && hardcfg.family == VTSS_FAM_KNX))
-    {
+    if (reqcfg.cpuevent_count_v1 == 0 && !(reqcfg.trace_cfg.trace_flags & (VTSS_CFGTRACE_CTX|VTSS_CFGTRACE_PWRACT|VTSS_CFGTRACE_PWRIDLE))) {
         /* There is no configuration was get from runtool, so init defaults */
         DEBUG_CPUEVT("There is no configuration was get from runtool, so init defaults");
         vtss_cpuevents_reqcfg_default(1, defsav);
@@ -865,17 +759,10 @@ union cpuid_0AH_edx
 
 int vtss_cpuevents_init(void)
 {
-    int counter_offset = 0; /* .modifier = VTSS_EVMOD_ALL | counter_offset; */
+    int counter_offset = 0;
 
-    if (hardcfg.family == VTSS_FAM_KNX) {
-        pmu_counter_no    = 2;
-        pmu_counter_width = 40;
-        pmu_counter_width_mask = (((unsigned long long)1) << pmu_counter_width) - 1;
+    if (hardcfg.family == VTSS_FAM_P6) {
 
-        pmu_fixed_counter_no    = 0;
-        pmu_fixed_counter_width = 0;
-        pmu_fixed_counter_width_mask = 0;
-    } else if (hardcfg.family == VTSS_FAM_P4 || hardcfg.family == VTSS_FAM_P6) {
         union cpuid_0AH_eax eax;
         union cpuid_0AH_edx edx;
         unsigned int ebx, ecx;
@@ -892,43 +779,24 @@ int vtss_cpuevents_init(void)
 
         counter_offset = (pmu_counter_no >= 4) ? VTSS_EVMOD_CNT3 : VTSS_EVMOD_CNT1;
     }
-    TRACE("PMU: counters=%d, width=%d (0x%llX)", pmu_counter_no, pmu_counter_width, pmu_counter_width_mask);
-    TRACE("PMU:    fixed=%d, width=%d (0x%llX)", pmu_fixed_counter_no, pmu_fixed_counter_width, pmu_fixed_counter_width_mask);
+    REPORT("PMU: fixed counters: %d counters: %d", pmu_fixed_counter_no, pmu_counter_no);
 
     if (!pmu_counter_no) {
         ERROR("PMU counters are not detected");
         hardcfg.family = VTSS_UNKNOWN_ARCH;
+        return VTSS_ERR_NOSUPPORT;
     }
 
     memset(cpuevent_desc, 0, sizeof(cpuevent_desc));
-    if (hardcfg.family == VTSS_FAM_KNX) {
-        TRACE("KNX-cpuevents is used");
-        cpuevent_desc[0].event_id = VTSS_EVID_NONHALTED_CLOCKTICKS;
-        cpuevent_desc[0].vft      = &vft_knx;
-        cpuevent_desc[0].name     = "CPU_CLK_UNHALTED";
-        cpuevent_desc[0].desc     = "CPU_CLK_UNHALTED";
-        cpuevent_desc[0].modifier = VTSS_EVMOD_ALL | counter_offset;
-        cpuevent_desc[0].selmsr   = KNX_CORE_PERFEVTSEL0;
-        cpuevent_desc[0].cntmsr   = KNX_CORE_PMC0;
-        cpuevent_desc[0].selmsk   = 0x53002A;
-
-        cpuevent_desc[1].event_id = VTSS_EVID_INSTRUCTIONS_RETIRED;
-        cpuevent_desc[1].vft      = &vft_knx;
-        cpuevent_desc[1].name     = "INSTRUCTIONS_EXECUTED";
-        cpuevent_desc[1].desc     = "INSTRUCTIONS_EXECUTED";
-        cpuevent_desc[1].modifier = VTSS_EVMOD_ALL | counter_offset;
-        cpuevent_desc[1].selmsr   = KNX_CORE_PERFEVTSEL0+1;
-        cpuevent_desc[1].cntmsr   = KNX_CORE_PMC0+1;
-        cpuevent_desc[1].selmsk   = 0x530016;
-    } else if (hardcfg.family == VTSS_FAM_P6) {
+    if (hardcfg.family == VTSS_FAM_P6) {
         TRACE("P6-cpuevents is used");
         cpuevent_desc[0].event_id = VTSS_EVID_FIXED_INSTRUCTIONS_RETIRED;
         cpuevent_desc[0].vft      = &vft_p6;
         cpuevent_desc[0].name     = "INST_RETIRED.ANY";
         cpuevent_desc[0].desc     = "INST_RETIRED.ANY";
         cpuevent_desc[0].modifier = VTSS_EVMOD_ALL | counter_offset;
-        cpuevent_desc[0].selmsr   = IA32_FIXED_CTR_CTRL;
-        cpuevent_desc[0].cntmsr   = IA32_FIXED_CTR0;
+        cpuevent_desc[0].selmsr   = VTSS_IA32_FIXED_CTR_CTRL;
+        cpuevent_desc[0].cntmsr   = VTSS_IA32_FIXED_CTR0;
         cpuevent_desc[0].selmsk   = 0x0000000b;
 
         cpuevent_desc[1].event_id = VTSS_EVID_FIXED_NONHALTED_CLOCKTICKS;
@@ -936,8 +804,8 @@ int vtss_cpuevents_init(void)
         cpuevent_desc[1].name     = "CPU_CLK_UNHALTED.THREAD";
         cpuevent_desc[1].desc     = "CPU_CLK_UNHALTED.THREAD";
         cpuevent_desc[1].modifier = VTSS_EVMOD_ALL | counter_offset;
-        cpuevent_desc[1].selmsr   = IA32_FIXED_CTR_CTRL;
-        cpuevent_desc[1].cntmsr   = IA32_FIXED_CTR0+1;
+        cpuevent_desc[1].selmsr   = VTSS_IA32_FIXED_CTR_CTRL;
+        cpuevent_desc[1].cntmsr   = VTSS_IA32_FIXED_CTR0+1;
         cpuevent_desc[1].selmsk   = 0x000000b0;
 
         cpuevent_desc[2].event_id = VTSS_EVID_FIXED_NONHALTED_REFTICKS;
@@ -945,8 +813,8 @@ int vtss_cpuevents_init(void)
         cpuevent_desc[2].name     = "CPU_CLK_UNHALTED.REF";
         cpuevent_desc[2].desc     = "CPU_CLK_UNHALTED.REF";
         cpuevent_desc[2].modifier = VTSS_EVMOD_ALL | counter_offset;
-        cpuevent_desc[2].selmsr   = IA32_FIXED_CTR_CTRL;
-        cpuevent_desc[2].cntmsr   = IA32_FIXED_CTR0+2;
+        cpuevent_desc[2].selmsr   = VTSS_IA32_FIXED_CTR_CTRL;
+        cpuevent_desc[2].cntmsr   = VTSS_IA32_FIXED_CTR0+2;
         cpuevent_desc[2].selmsk   = 0x00000b00;
 
         /* CPU BUG: broken fixed counters on some Meroms and Penryns */
@@ -959,18 +827,19 @@ int vtss_cpuevents_init(void)
         { /* check for read-only counter mode */
             unsigned long long tmp, tmp1;
 
-            wrmsrl(IA32_PERFEVTSEL0, 0ULL);
-            wrmsrl(IA32_PMC0, 0ULL);
-            rdmsrl(IA32_PMC0, tmp);
+            wrmsrl(VTSS_IA32_PERFEVTSEL0, 0ULL);
+            wrmsrl(VTSS_IA32_PMC0, 0ULL);
+            rdmsrl(VTSS_IA32_PMC0, tmp);
             tmp |= 0x7f00ULL;
-            wrmsrl(IA32_PMC0, tmp);
-            rdmsrl(IA32_PMC0, tmp1);
+            wrmsrl(VTSS_IA32_PMC0, tmp);
+            rdmsrl(VTSS_IA32_PMC0, tmp1);
             if (tmp1 != tmp) {
                 /* read-only counters, change the event VFT */
+                REPORT("Read-only counter mode detected");
                 vft_p6.restart     = vf_p6_restart_ro;
                 vft_p6.freeze_read = vf_p6_freeze_read_ro;
             }
-            wrmsrl(IA32_PMC0, 0ULL);
+            wrmsrl(VTSS_IA32_PMC0, 0ULL);
         }
     }
     /// TODO: validate SNB and MFLD energy meters:
@@ -1003,50 +872,13 @@ int vtss_cpuevents_init(void)
         sysevent_type[vtss_sysevent_energy_pack] = vtss_sysevent_end;
         sysevent_type[vtss_sysevent_energy_dram] = vtss_sysevent_end;
     }
-    ///if (hardcfg.family != 0x06 || hardcfg.model != 0x27)
     sysevent_type[vtss_sysevent_energy_soc] = vtss_sysevent_end;
-#if 0
-    /// disable C-state residency events if not supported
-    if (hardcfg.family == VTSS_FAM_P6) {
-        switch (hardcfg.model) {
-        /// NHM/WMR
-        case 0x1a:
-        case 0x1e:
-        case 0x1f:
-        case 0x2e:
-        case 0x25:
-        case 0x2c:
-            sysevent_type[vtss_sysevent_idle_c7] = vtss_sysevent_end;
-            break;
-        /// SNB/IVB
-        case 0x2a:
-        case 0x2d:
-        case 0x3a:
-            break;
-        /// Medfield/CedarTrail/CloverTrail
-        case 0x27:
-        /// TODO: make sure Cx MSRs are supported
-        ///case 0x35:
-        ///case 0x36:
-            break;
-        default:
-            sysevent_type[vtss_sysevent_idle_c3] = vtss_sysevent_end;
-            sysevent_type[vtss_sysevent_idle_c6] = vtss_sysevent_end;
-            sysevent_type[vtss_sysevent_idle_c7] = vtss_sysevent_end;
-        }
-    } else {
-        sysevent_type[vtss_sysevent_idle_c3] = vtss_sysevent_end;
-        sysevent_type[vtss_sysevent_idle_c6] = vtss_sysevent_end;
-        sysevent_type[vtss_sysevent_idle_c7] = vtss_sysevent_end;
-    }
-#else
     /* TODO: Not implemeted. Turn off for Linux now all idle_* */
     sysevent_type[vtss_sysevent_idle_time]   = vtss_sysevent_end;
     sysevent_type[vtss_sysevent_idle_wakeup] = vtss_sysevent_end;
     sysevent_type[vtss_sysevent_idle_c3]     = vtss_sysevent_end;
     sysevent_type[vtss_sysevent_idle_c6]     = vtss_sysevent_end;
     sysevent_type[vtss_sysevent_idle_c7]     = vtss_sysevent_end;
-#endif
     return 0;
 }
 
@@ -1063,7 +895,7 @@ void vtss_cpuevents_fini(void)
     hardcfg.family = VTSS_UNKNOWN_ARCH;
 }
 
-#define VTSS_CLR_PEBS_OVF 0x4000000000000000ULL
+#define VTSS_CLR_PEBS_OVF        0x4000000000000000ULL
 #define VTSS_CLR_STATUS_PEBS_OVF 0x4000000000000000ULL
 
 int vtss_cpuevents_clr_pebs_ovf(void)
@@ -1071,9 +903,9 @@ int vtss_cpuevents_clr_pebs_ovf(void)
     unsigned long long val = 0;
 
     if (hardcfg.family == VTSS_FAM_P6 && hardcfg.model >= VTSS_CPU_MRM) {
-        rdmsrl(IA32_PERF_GLOBAL_STATUS, val);
+        rdmsrl(VTSS_IA32_PERF_GLOBAL_STATUS, val);
         if (val & VTSS_CLR_STATUS_PEBS_OVF) {
-            wrmsrl(MSR_PERF_GLOBAL_OVF_CTRL, VTSS_CLR_PEBS_OVF);
+            wrmsrl(VTSS_IA32_PERF_GLOBAL_OVF_CTRL, VTSS_CLR_PEBS_OVF);
             return 1;
         }
     }

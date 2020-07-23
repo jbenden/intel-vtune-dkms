@@ -30,9 +30,6 @@
 #include "utils.h"
 
 #include <linux/kallsyms.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,0,0)
-#include <asm-generic/io.h>
-#endif
 
 #ifdef CONFIG_KALLSYMS
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,0,0)

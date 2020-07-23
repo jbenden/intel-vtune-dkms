@@ -710,8 +710,6 @@ void vtss_probe_fini(void)
 #endif
 }
 
-/* ----- module init/fini ----- */
-
 void cleanup_module(void)
 {
     vtss_fini();

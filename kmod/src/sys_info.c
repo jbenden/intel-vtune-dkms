@@ -349,6 +349,8 @@ sys_info_Fill_CPUID (
     U32                  cache_mask_width         = 0;
     U32                  num_cores                = 0;
     U32                  level_type               = 0;
+    U32                  num_dies_per_pkg         = 0;
+    DRV_BOOL             multi_die                = FALSE;
     DRV_BOOL             is_function_1f_available = FALSE;
 
     SEP_DRV_LOG_TRACE_IN("CPU: %u.", cpu);
@@ -443,11 +445,16 @@ sys_info_Fill_CPUID (
                 else if (cpuid_function == 0x1f) {
                     if (level_type      == 2) {
                         shift_nbits_module = rax & 0x1f;    //No. of bits to shift APIC ID to get Module ID
+                        shift_nbits_pkg = rax & 0x1f;       //No. of bits to shift APIC ID to get Pkg ID
+
                     }
                     if (level_type      == 3 ||
                         level_type      == 4 ||
                         level_type      == 5) {
-                        shift_nbits_pkg += rax & 0x1f;    //No. of bits to shift APIC ID to get Pkg ID
+                        if (level_type == 5) {
+                            multi_die = TRUE;
+                        }
+                        shift_nbits_pkg = rax & 0x1f;    //No. of bits to shift APIC ID to get Pkg ID
                     }
                 }
 
@@ -519,9 +526,18 @@ sys_info_Fill_CPUID (
         thread_id             = (U16)(apic_id & (cpu_threads_per_core-1));
     }
 
+    package_id = apic_id >> shift_nbits_pkg;
+
     if (is_function_1f_available) {
         core_id    = (apic_id >> shift_nbits_core) & sys_info_bitmask(shift_nbits_module - shift_nbits_core);
         module_id  = (apic_id >> shift_nbits_module) & sys_info_bitmask(shift_nbits_pkg - shift_nbits_module);
+        if (multi_die) {
+            num_dies_per_pkg = (U32)1 << (shift_nbits_pkg - shift_nbits_module); // num_dies in a pkg = 2 ^ (CPUID bit width for dies)
+            package_id = (num_dies_per_pkg * package_id) + module_id;
+            // In the examples below, num_dies is same num_modules, die_id is same as module_id
+            // eg: num_dies=2, init_pkg_id=0, die_id=0 -> final_pkg_id = 0
+            //     num_dies=2, init_pkg_id=2, die_id=1 -> final_pkg_id = (2 * 2) + 1 = 5
+        }
     }
     else {
         core_id    = (apic_id >> shift_nbits_core) & sys_info_bitmask(shift_nbits_pkg - shift_nbits_core);
@@ -530,7 +546,6 @@ sys_info_Fill_CPUID (
             module_id = (U32)(core_id/2);
         }
     }
-    package_id = apic_id >> shift_nbits_pkg;
 
     SEP_DRV_LOG_TRACE("MODULE ID=%d CORE ID=%d for cpu=%d PACKAGE ID=%d.", module_id, core_id, cpu, package_id);
     SEP_DRV_LOG_TRACE("Num_logical_per_physical=%d cores_per_die=%d.", num_logical_per_physical, cores_per_die);

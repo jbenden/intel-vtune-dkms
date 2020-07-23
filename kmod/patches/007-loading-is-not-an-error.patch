@@ -1,6 +1,6 @@
 --- a/src/lwpmudrv.c
 +++ b/src/lwpmudrv.c
-@@ -6545,7 +6545,6 @@ lwpmu_Load (
+@@ -6549,7 +6549,6 @@ lwpmu_Load (
      unsigned long          pfn;
  #endif
  

@@ -199,7 +199,9 @@ static dev_t     lwsampunc_DevNum; /* the major and minor parts for SEP3 per pac
 static dev_t     lwsideband_DevNum;
 static dev_t     lwemon_DevNum;
 
+#if !defined(DRV_UDEV_UNAVAILABLE)
 static struct class     *pmu_class   = NULL;
+#endif
 
 extern volatile int      config_done;
 
@@ -6538,7 +6540,9 @@ lwpmu_Load (
     int        i, num_cpus;
     dev_t      lwmod_DevNum;
     OS_STATUS  status      = OS_INVALID;
+#if !defined (DRV_UDEV_UNAVAILABLE)
     char       dev_name[MAXNAMELEN];
+#endif
 #if defined(CONFIG_XEN_HAVE_VPMU)
     xen_pmu_params_t       xenpmu_param;
     xen_pmu_data_t        *xenpmu_data;
@@ -6629,11 +6633,13 @@ lwpmu_Load (
 
     /* Register the file operations with the OS */
 
+#if !defined(DRV_UDEV_UNAVAILABLE)
     pmu_class = class_create(THIS_MODULE, SEP_DRIVER_NAME);
     if (IS_ERR(pmu_class)) {
         SEP_DRV_LOG_ERROR("Error registering SEP control class!");
     }
     device_create(pmu_class, NULL, lwpmu_DevNum, NULL, SEP_DRIVER_NAME DRV_DEVICE_DELIMITER"c");
+#endif
 
     status = lwpmu_setup_cdev(lwpmu_control,&lwpmu_Fops,lwpmu_DevNum);
     if (status) {
@@ -6643,7 +6649,9 @@ lwpmu_Load (
     /* _c init was fine, now try _m */
     lwmod_DevNum = MKDEV(MAJOR(lwpmu_DevNum),MINOR(lwpmu_DevNum)+1);
 
+#if !defined(DRV_UDEV_UNAVAILABLE)
     device_create(pmu_class, NULL, lwmod_DevNum, NULL, SEP_DRIVER_NAME DRV_DEVICE_DELIMITER"m");
+#endif
 
     status       = lwpmu_setup_cdev(lwmod_control,&lwmod_Fops,lwmod_DevNum);
     if (status) {
@@ -6662,8 +6670,10 @@ lwpmu_Load (
 
     /* Register the file operations with the OS */
     for (i = 0; i < 1; i++) {
+#if !defined(DRV_UDEV_UNAVAILABLE)
         snprintf(dev_name, MAXNAMELEN, "%s%se", SEP_DRIVER_NAME, DRV_DEVICE_DELIMITER);
         device_create(pmu_class, NULL, lwemon_DevNum+i, NULL, dev_name);
+#endif
         status = lwpmu_setup_cdev(lwemon_control+i,
                                   &lwemon_Fops,
                                   lwemon_DevNum+i);
@@ -6687,8 +6697,10 @@ lwpmu_Load (
 
     /* Register the file operations with the OS */
     for (i = 0; i < num_cpus; i++) {
+#if !defined(DRV_UDEV_UNAVAILABLE)
         snprintf(dev_name, MAXNAMELEN, "%s%ss%d", SEP_DRIVER_NAME, DRV_DEVICE_DELIMITER, i);
         device_create(pmu_class, NULL, lwsamp_DevNum+i, NULL, dev_name);
+#endif
         status = lwpmu_setup_cdev(lwsamp_control+i,
                                   &lwsamp_Fops,
                                   lwsamp_DevNum+i);
@@ -6710,8 +6722,10 @@ lwpmu_Load (
     }
 
     for (i = 0; i < num_cpus; i++) {
+#if !defined(DRV_UDEV_UNAVAILABLE)
         snprintf(dev_name, MAXNAMELEN, "%s%sb%d", SEP_DRIVER_NAME, DRV_DEVICE_DELIMITER, i);
         device_create(pmu_class, NULL, lwsideband_DevNum+i, NULL, dev_name);
+#endif
         status = lwpmu_setup_cdev(lwsideband_control+i,
                                   &lwsideband_Fops,
                                   lwsideband_DevNum+i);
@@ -6798,8 +6812,10 @@ lwpmu_Load (
 
     /* Register the file operations with the OS */
     for (i = 0; i < num_packages; i++) {
+#if !defined(DRV_UDEV_UNAVAILABLE)
         snprintf(dev_name, MAXNAMELEN, "%s%su%d", SEP_DRIVER_NAME, DRV_DEVICE_DELIMITER, i);
         device_create(pmu_class, NULL, lwsampunc_DevNum+i, NULL, dev_name);
+#endif
         status = lwpmu_setup_cdev(lwsampunc_control+i,
                                   &lwsampunc_Fops,
                                   lwsampunc_DevNum+i);
@@ -6844,6 +6860,10 @@ lwpmu_Load (
 
 #if defined(BUILD_GFX)
     SEP_DRV_LOG_LOAD("Graphics support is enabled.");
+#endif
+
+#if defined(DRV_UDEV_UNAVAILABLE)
+    SEP_DRV_LOG_LOAD("Device files are created separately.");
 #endif
 
     SEP_DRV_LOG_LOAD("NMI will be used for handling PMU interrupts.");
@@ -6928,35 +6948,47 @@ lwpmu_Unload (
 
     UNC_COMMON_Clean_Up();
 
+#if !defined(DRV_UDEV_UNAVAILABLE)
     unregister_chrdev(MAJOR(lwpmu_DevNum), SEP_DRIVER_NAME);
     device_destroy(pmu_class, lwpmu_DevNum);
     device_destroy(pmu_class, lwpmu_DevNum+1);
+#endif
 
     cdev_del(&LWPMU_DEV_cdev(lwpmu_control));
     cdev_del(&LWPMU_DEV_cdev(lwmod_control));
     unregister_chrdev_region(lwpmu_DevNum, PMU_DEVICES);
 
+#if !defined(DRV_UDEV_UNAVAILABLE)
     unregister_chrdev(MAJOR(lwsamp_DevNum), SEP_SAMPLES_NAME);
     unregister_chrdev(MAJOR(lwsampunc_DevNum), SEP_UNCORE_NAME);
     unregister_chrdev(MAJOR(lwsideband_DevNum), SEP_SIDEBAND_NAME);
     unregister_chrdev(MAJOR(lwemon_DevNum), SEP_EMON_NAME);
+#endif
 
     for (i = 0; i < num_cpus; i++) {
+#if !defined(DRV_UDEV_UNAVAILABLE)
         device_destroy(pmu_class, lwsamp_DevNum+i);
         device_destroy(pmu_class, lwsideband_DevNum+i);
+#endif
         cdev_del(&LWPMU_DEV_cdev(&lwsamp_control[i]));
         cdev_del(&LWPMU_DEV_cdev(&lwsideband_control[i]));
     }
 
     for (i = 0; i < num_packages; i++) {
+#if !defined(DRV_UDEV_UNAVAILABLE)
         device_destroy(pmu_class, lwsampunc_DevNum+i);
+#endif
         cdev_del(&LWPMU_DEV_cdev(&lwsampunc_control[i]));
     }
 
+#if !defined(DRV_UDEV_UNAVAILABLE)
     device_destroy(pmu_class, lwemon_DevNum+0);
+#endif
     cdev_del(&LWPMU_DEV_cdev(lwemon_control));
 
+#if !defined(DRV_UDEV_UNAVAILABLE)
     class_destroy(pmu_class);
+#endif
 
     unregister_chrdev_region(lwsamp_DevNum, num_cpus);
     unregister_chrdev_region(lwsampunc_DevNum, num_packages);

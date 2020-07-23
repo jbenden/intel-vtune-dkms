@@ -114,7 +114,9 @@ CHMOD="chmod"
 CUT="cut"
 DIRNAME="dirname"
 GREP="grep"
+PGREP="pgrep"
 INSMOD="insmod"
+MKNOD="mknod"
 LSMOD="lsmod"
 MKDIR="mkdir"
 RM="rm"
@@ -130,7 +132,7 @@ YPCAT="ypcat"
 GROUPADD="groupadd"
 MODINFO="modinfo"
 
-COMMANDS_TO_CHECK="${CUT} ${DIRNAME} ${GREP} ${INSMOD} ${LSMOD} ${MKDIR} ${RM} ${SED} ${TR} ${UNAME} ${WHICH} ${CAT}"
+COMMANDS_TO_CHECK="${CUT} ${DIRNAME} ${GREP} ${PGREP} ${INSMOD} ${MKNOD} ${LSMOD} ${MKDIR} ${RM} ${SED} ${TR} ${UNAME} ${WHICH} ${CAT}"
 
 # ------------------------------ FUNCTIONS -----------------------------------
 
@@ -168,6 +170,10 @@ print_usage_and_exit()
   print_msg "      restricted environment mode: minimal requirements to the system runtime"
   print_msg "      like in busybox case"
   print_msg ""
+  print_msg "    --no-udev"
+  print_msg "      Create device files seapartely when no device manager is running"
+  print_msg ""
+  print_msg ""
   exit $err
 }
 
@@ -183,6 +189,7 @@ fi
 
 # check for certain options
 reload_driver=0
+no_udev_mode=0
 while [ $# -gt 0 ] ; do
   case "$1" in
     -h | --help)
@@ -237,6 +244,9 @@ while [ $# -gt 0 ] ; do
     -re | --restricted-environment)
       BUSYBOX_SHELL=yes
       ;;
+    --no-udev)
+      no_udev_mode=1
+      ;;
     *)
       print_err ""
       print_err "ERROR: unrecognized option \"$1\""
@@ -280,6 +290,20 @@ if [ ${OK} != "true" ] ; then
   print_err "Otherwise, please add the above commands to your PATH and re-run the script ... exiting."
   exit 255
 fi
+
+# check if the device manager exists, and if not, then ask for the option
+UDEVD_PID=`${PGREP} udevd`
+if [ -z "${UDEVD_PID}" ] ; then
+  if [ $no_udev_mode -eq 0 ] ; then
+    print_err ""
+    print_err "The udev deivce manager is not running on the system."
+    print_err "Recompile the driver with the option '--no-udev'"
+    print_err "Then, run this script with the option '--no-udev'"
+    print_err ""
+    exit 236
+  fi
+fi
+
 
 # ------------------------------ VARIABLES -----------------------------------
 
@@ -457,6 +481,30 @@ if [ -z "${DEVNUM}" ] ; then
   print_err "Error:  unable to find device \"${DRIVER_NAME}\" in /proc/devices !"
   print_err ""
   exit 233
+fi
+
+if [ $no_udev_mode -eq 1 ] ; then
+  # remove base devices that were previously created by the insmod script
+  if [ -e /dev/${DRIVER_NAME} ] ; then
+    print_nnl "Deleting previously created /dev/${DRIVER_NAME} base devices ... "
+    sleep 1
+    ${RM} -r ${SOCPERF_FORCE} /dev/${DRIVER_NAME}
+    print_msg "done."
+  fi
+
+  # create the base devices
+  print_nnl "Creating /dev/${DRIVER_NAME} base devices with major number ${DEVNUM} ... "
+  sleep 1
+  ${MKDIR} -p /dev/${DRIVER_NAME}
+  ${MKNOD} /dev/${DRIVER_NAME}/c c ${DEVNUM} 0
+  MKNOD_RESULT=$?
+  if [ ${MKNOD_RESULT} -ne 0 ] ; then
+    print_err ""
+    print_err "Error:  unable to create required /dev/${DRIVER_NAME} base device !"
+    print_err ""
+    exit 232
+  fi
+  print_msg "done."
 fi
 
 # change group ownership to whichever group is permitted to open the driver

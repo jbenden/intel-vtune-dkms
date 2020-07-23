@@ -158,53 +158,47 @@ static void vtss_fmtcfg_init(void)
 
 static void vtss_syscfg_init(void)
 {
-    char utsname[2*(__NEW_UTS_LEN+1)+2];
     vtss_syscfg_t *sysptr = &syscfg;
     struct new_utsname *u = init_utsname();
 
     /// sysinfo
     syscfg.version = 1;
-    syscfg.major = (short)0;
-    syscfg.minor = (short)0;
+    syscfg.major = (short)((LINUX_VERSION_CODE>>16) & 0xff);
+    syscfg.minor = (short)((LINUX_VERSION_CODE>>8) & 0xff);
     syscfg.spack = (short)0;
-    syscfg.extra = (short)0;
+    syscfg.extra = (short)(LINUX_VERSION_CODE & 0xff);
 #if defined(CONFIG_X86_32)
     syscfg.type  = VTSS_LINUX_IA32;
 #elif defined(CONFIG_X86_64)
-#if defined(VTSS_ARCH_KNX)
-    syscfg.type  = VTSS_LINUX_KNC;
-#else
     syscfg.type  = VTSS_LINUX_EM64T;
-#endif
 #else
     syscfg.type  = VTSS_UNKNOWN_ARCH;
 #endif
 
     /// host name
-    TRACE("u->nodename='%s'", u->nodename);
+    TRACE("nodename='%s'", u->nodename);
     sysptr->len = 1 + strlen(u->nodename);
     memcpy(sysptr->host_name, u->nodename, sysptr->len);
     sysptr = (vtss_syscfg_t*)((char*)sysptr + sysptr->len + sizeof(short));
 
     /// platform brand name
-    TRACE("u->sysname='%s'", u->sysname);
-    TRACE("u->machine='%s'", u->machine);
-    snprintf(utsname, sizeof(utsname)-1, "%s-%s", u->sysname, u->machine);
-    sysptr->len = 1 + strlen(utsname);
-    memcpy(sysptr->brand_name, utsname, sysptr->len);
+    TRACE("sysname='%s'", u->sysname);
+    TRACE("machine='%s'", u->machine);
+    sysptr->len = 1 + strlen(u->sysname);
+    memcpy(sysptr->brand_name, u->sysname, sysptr->len);
     sysptr = (vtss_syscfg_t*)((char*)sysptr + sysptr->len + sizeof(short));
 
     /// system ID string
-    TRACE("u->release='%s'", u->release);
-    TRACE("u->version='%s'", u->version);
-    snprintf(utsname, sizeof(utsname)-1, "%s %s", u->release, u->version);
-    sysptr->len = 1 + strlen(utsname);
-    memcpy(sysptr->host_name, utsname, sysptr->len);
+    TRACE("release='%s'", u->release);
+    TRACE("version='%s'", u->version);
+    sysptr->len = 1 + strlen(u->release);
+    memcpy(sysptr->sysid_string, u->release, sysptr->len);
     sysptr = (vtss_syscfg_t*)((char*)sysptr + sysptr->len + sizeof(short));
+    REPORT("Kernel version %s", u->release);
 
     /// root directory
     sysptr->len = 2; /* 1 + strlen("/") */
-    memcpy(sysptr->host_name, "/", sysptr->len);
+    memcpy(sysptr->system_root_dir, "/", sysptr->len);
     sysptr = (vtss_syscfg_t*)((char*)sysptr + sysptr->len + sizeof(short));
 
     syscfg.record_size = (int)((char *)sysptr - (char *)&syscfg + (char *)&syscfg.len - (char *)&syscfg);
@@ -262,9 +256,6 @@ static void vtss_hardcfg_init(void)
     union cpuid_01H_ebx ebx1;
     union cpuid_04H_eax eax4;
     unsigned int ebx, ecx, edx;
-    int node_no   = 0;
-    int pack_no   = 0;
-    int core_no   = 0;
     int thread_no = 0;
     int ht_supported = 0;
     int max_cpu_id = 0;
@@ -287,11 +278,7 @@ static void vtss_hardcfg_init(void)
     hardcfg.os_type = VTSS_LINUX_IA32;
 #elif defined(CONFIG_X86_64)
     hardcfg.mode    = 64;
-#if defined(VTSS_ARCH_KNX)
-    hardcfg.os_type = VTSS_LINUX_KNC;
-#else
     hardcfg.os_type = VTSS_LINUX_EM64T;
-#endif
 #else
     hardcfg.mode    = 0;
     hardcfg.os_type = VTSS_UNKNOWN_ARCH;
@@ -301,14 +288,15 @@ static void vtss_hardcfg_init(void)
     hardcfg.os_sp    = 0;
 
     cpuid(0x01, &eax1.full, &ebx1.full, &ecx, &edx);
-    if ((hardcfg.family = eax1.split.family) == 0x0f)
+
+    hardcfg.family = eax1.split.family;
+    if (eax1.split.family == 0x0f)
         hardcfg.family += eax1.split.family_ext;
     hardcfg.model = eax1.split.model;
     if (eax1.split.family == 0x06 || eax1.split.family == 0x0f)
         hardcfg.model += (eax1.split.model_ext << 4);
     hardcfg.stepping = eax1.split.stepping;
     ht_supported = ((edx >> 28) & 1) ? 1 : 0;
-    TRACE("CPUID(family=%02x, model=%02x, stepping=%02x, ht=%d)", hardcfg.family, hardcfg.model, hardcfg.stepping, ht_supported);
 
     cpuid(0x04, &eax4.full, &ebx, &ecx, &edx);
 
@@ -325,40 +313,17 @@ static void vtss_hardcfg_init(void)
     else {
         hardcfg.cpu_no = num_present_cpus();
     }
-    /* TODO: determine the number of nodes */
-    node_no = 1;
     if (hardcfg.cpu_no == 1) {
-        thread_no = core_no = pack_no = 1;
+        thread_no = 1;
     } else {
-        if ((hardcfg.family == VTSS_FAM_P4 && hardcfg.model >= 0x04 && hardcfg.stepping >= 0x04) ||
-            (hardcfg.family == VTSS_FAM_P6 && hardcfg.model >= VTSS_CPU_MRM))
-        {
-            thread_no = eax4.split.smt_no  + 1;
-            core_no   = eax4.split.core_no + 1;
-        } else if (hardcfg.family == VTSS_FAM_P4) {
-            thread_no = ebx1.split.unit_no;
-            core_no   = 1;
-        } else if (hardcfg.family == VTSS_FAM_KNX) {
-            thread_no = 4;
-            core_no   = eax4.split.core_no ? (eax4.split.core_no + 1) : (hardcfg.cpu_no / thread_no);
-        } else {
-            thread_no = ebx1.split.unit_no;
-            core_no   = eax4.split.core_no + 1;
+        if (hardcfg.family == VTSS_FAM_P6 && hardcfg.model >= VTSS_CPU_MRM) {
+            thread_no = eax4.split.smt_no + 1;
         }
         thread_no = thread_no ? thread_no : 1;
-        core_no   = core_no   ? core_no   : 1;
-        pack_no   = hardcfg.cpu_no / (core_no * thread_no * node_no);
     }
-    TRACE("cpu_no=%d, node_no=%d, pack_no=%d, core_no=%d, thread_no=%d",
-          hardcfg.cpu_no, node_no, pack_no, core_no, thread_no);
-
-    /*
-     * disable the driver for P4 as it is not going
-     * to be supported in the future
-     */
-    if (hardcfg.family == VTSS_FAM_P4) {
-        hardcfg.family = VTSS_UNKNOWN_ARCH;
-    }
+    REPORT("Detected %d CPUs", hardcfg.cpu_no);
+    REPORT("CPU family: 0x%02x, model: 0x%02x, stepping: %02x, HT: %s",
+        hardcfg.family, hardcfg.model, hardcfg.stepping, ht_supported ? "yes" : "no");
 
     /*
      * build cpu map - distribute the current thread to all CPUs
