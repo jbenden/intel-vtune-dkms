@@ -1,0 +1,101 @@
+--- a/src/utility.c
++++ b/src/utility.c
+@@ -77,7 +77,11 @@ UTILITY_down_read_mm (
+ {
+     SEP_DRV_LOG_TRACE_IN("Mm: %p.", mm);
+ 
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,8,0)
++    down_read((struct rw_semaphore *) &mm->mmap_lock);
++#else
+     down_read((struct rw_semaphore *) &mm->mmap_sem);
++#endif
+ 
+     SEP_DRV_LOG_TRACE_OUT("");
+     return;
+@@ -90,7 +94,11 @@ UTILITY_up_read_mm (
+ {
+     SEP_DRV_LOG_TRACE_IN("Mm: %p.", mm);
+ 
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,8,0)
++    up_read((struct rw_semaphore *) &mm->mmap_lock);
++#else
+     up_read((struct rw_semaphore *) &mm->mmap_sem);
++#endif
+ 
+     SEP_DRV_LOG_TRACE_OUT("");
+     return;
+--- a/src/vtsspp/collector.c
++++ b/src/vtsspp/collector.c
+@@ -1398,7 +1398,11 @@ int vtss_mmap_all(struct vtss_task_data*
+         long long cputsc, realtsc;
+         VTSS_SET_MMAP_INIT(tskd);
+         vtss_time_get_sync(&cputsc, &realtsc);
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,8,0)
++        down_read(&mm->mmap_lock);
++#else
+         down_read(&mm->mmap_sem);
++#endif
+         for (vma = mm->mmap; vma != NULL; vma = vma->vm_next) {
+             DEBUG_COLLECTOR("vma=[0x%lx - 0x%lx], flags=0x%lx", vma->vm_start, vma->vm_end, vma->vm_flags);
+             if ((vma->vm_flags & (VM_EXEC | VM_MAYEXEC)) && !(vma->vm_flags & VM_WRITE) &&
+@@ -1461,7 +1465,11 @@ int vtss_mmap_all(struct vtss_task_data*
+                 repeat = 1;
+             }
+         }
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,8,0)
++        up_read(&mm->mmap_lock);
++#else
+         up_read(&mm->mmap_sem);
++#endif
+         VTSS_CLEAR_MMAP_INIT(tskd);
+         mmput(mm);
+     }
+--- a/src/vtsspp/user_vm.c
++++ b/src/vtsspp/user_vm.c
+@@ -48,7 +48,9 @@
+ #include <asm/cacheflush.h>
+ #include <asm/uaccess.h>
+ #ifdef VTSS_AUTOCONF_NMI_UACCESS
++#undef MODULE
+ #include <asm/tlbflush.h>
++#define MODULE
+ #endif
+ 
+ /*
+--- a/src/pebs.c
++++ b/src/pebs.c
+@@ -56,7 +56,9 @@ void  (*local_kaiser_remove_mapping)(uns
+ #include <linux/kallsyms.h>
+ #include <asm/pgtable_types.h>
+ #include <asm/intel_ds.h>
++#undef MODULE
+ #include <asm/tlbflush.h>
++#define MODULE
+ void  (*local_cea_set_pte)(void *cea_vaddr, phys_addr_t pa, pgprot_t flags) = NULL;
+ void  (*local_do_kernel_range_flush)(void *info) = NULL;
+ DEFINE_PER_CPU(PVOID, dts_buffer_cea);
+--- a/src/vtsspp/autoconf/nmi_uaccess.c
++++ b/src/vtsspp/autoconf/nmi_uaccess.c
+@@ -30,6 +30,10 @@
+ 
+ int autoconf_test(void)
+ {
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,8,0)
++#error nmi_uaccess_okay was restricted
++#else
+     nmi_uaccess_okay();
++#endif
+     return 0;
+ }
+--- a/src/vtsspp/utils.c
++++ b/src/vtsspp/utils.c
+@@ -316,7 +316,9 @@ void vtss_get_kstart(unsigned long *addr
+ }
+ 
+ #ifdef VTSS_CONFIG_KPTI
++#undef MODULE
+ #include <asm/tlbflush.h>
++#define MODULE
+ #include <linux/kallsyms.h>
+ 
+ static void (*vtss_cea_set_pte)(void *cea_vaddr, phys_addr_t pa, pgprot_t flags) = NULL;

@@ -7,3 +7,5 @@
 006-proc_ops.patch
 007-loading-is-not-an-error.patch
 009-kallsym.patch
+010-mm_struct.patch
+011-get_user_pages_fast.patch

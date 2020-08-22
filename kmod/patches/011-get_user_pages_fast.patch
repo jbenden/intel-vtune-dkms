@@ -1,0 +1,14 @@
+--- a/src/pebs.c
++++ b/src/pebs.c
+@@ -1322,7 +1322,11 @@ PEBS_Fill_Phy_Addr (
+         }
+         else if (lin_addr < __PAGE_OFFSET) {
+             pagefault_disable();
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,8,0)
++            if (get_user_pages_fast(lin_addr, 1, 1, &page)) {
++#else
+             if (__get_user_pages_fast(lin_addr, 1, 1, &page)) {
++#endif
+                 LATENCY_INFO_phys_addr(latency_info) = (U64)page_to_phys(page) + offset;
+                 put_page(page);
+             }
