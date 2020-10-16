@@ -1,0 +1,76 @@
+--- a/src/inc/control.h
++++ b/src/inc/control.h
+@@ -53,6 +53,10 @@
+ #define  MAX_KMALLOC_SIZE ((1<<17)-1)
+ #define  SEP_DRV_MEMSET   memset
+ 
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,9,0)
++#define HAVE_UNLOCKED_IOCTL 1
++#endif
++
+ // check whether Linux driver should use unlocked ioctls (not protected by BKL)
+ #if defined(HAVE_UNLOCKED_IOCTL)
+ #define DRV_USE_UNLOCKED_IOCTL
+--- a/src/socperf/src/inc/control.h
++++ b/src/socperf/src/inc/control.h
+@@ -77,6 +77,10 @@
+ // above this threshold
+ #define  MAX_KMALLOC_SIZE ((1<<17)-1)
+ 
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,9,0)
++#define HAVE_UNLOCKED_IOCTL 1
++#endif
++
+ // check whether Linux driver should use unlocked ioctls (not protected by BKL)
+ #if defined(HAVE_UNLOCKED_IOCTL)
+ #define DRV_USE_UNLOCKED_IOCTL
+--- a/src/inc/apic.h
++++ b/src/inc/apic.h
+@@ -32,6 +32,10 @@
+ #include <stddef.h>
+ #include <linux/irq.h>
+ 
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,9,0)
++#include <asm/apic.h>
++#endif
++
+ typedef U64 *PHYSICAL_ADDRESS;
+ /**
+ // Data Types and Macros
+--- a/src/pax/pax.c
++++ b/src/pax/pax.c
+@@ -725,7 +725,7 @@ pax_Device_Control (
+     return status;
+ }
+ 
+-#if defined(CONFIG_COMPAT) && defined(DRV_EM64T)
++#if defined(HAVE_COMPAT_IOCTL) && defined(DRV_EM64T)
+ extern IOCTL_OP_TYPE
+ pax_Device_Control_Compat (
+     struct   file   *filp,
+--- a/include/pax_shared.h
++++ b/include/pax_shared.h
+@@ -91,6 +91,10 @@
+ #define PAX_IOCTL_RESERVE_ALL    _IO (PAX_IOC_MAGIC, 3)
+ #define PAX_IOCTL_UNRESERVE      _IO (PAX_IOC_MAGIC, 4)
+ 
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,9,0)
++#define HAVE_COMPAT_IOCTL 1
++#endif
++
+ #if defined(HAVE_COMPAT_IOCTL) && defined(DRV_EM64T)
+ #define PAX_IOCTL_COMPAT_INFO           _IOW(PAX_IOC_MAGIC, 1, compat_uptr_t)
+ #define PAX_IOCTL_COMPAT_STATUS         _IOW(PAX_IOC_MAGIC, 2, compat_uptr_t)
+--- a/src/vtsspp/apic.h
++++ b/src/vtsspp/apic.h
+@@ -30,6 +30,10 @@
+ 
+ #include <linux/irq.h>
+ 
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,9,0)
++#include <asm/apic.h>
++#endif
++
+ /**
+  * Interrupt vector for PMU overflow event
+  *
